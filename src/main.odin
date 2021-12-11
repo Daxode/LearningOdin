@@ -5,6 +5,7 @@ import "vendor:glfw"
 import "core:fmt"
 import "core:dynlib"
 import "core:runtime"
+import "core:strings"
 
 load_vulkan_function_pointers::proc()
 {
@@ -29,15 +30,15 @@ load_vulkan_function_pointers::proc()
 main::proc()
 {
     load_vulkan_function_pointers()
+
+    count : u32 = 0;
+    vk.EnumerateInstanceExtensionProperties(nil,&count,nil)
+    
     // Create GLFW Window
     glfw.Init();
     glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
     glfw.WindowHint(glfw.RESIZABLE, 0);
-    window := glfw.CreateWindow(1600, 900, "Vulkan window", nil, nil);
-
-    count : u32 = 0;
-    vk.EnumerateInstanceExtensionProperties(nil,&count,nil)
-    fmt.println("Instance Extension Properties: ", count)
+    window := glfw.CreateWindow(1600, 900, strings.clone_to_cstring(fmt.aprintf("Instance Extension Properties: {}", count)), nil, nil);
 
     // Create App Info
     appInfo : vk.ApplicationInfo;
