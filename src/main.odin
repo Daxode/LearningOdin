@@ -11,10 +11,10 @@ main::proc()
     glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
     glfw.WindowHint(glfw.RESIZABLE, 0);
 
-    fmt.printf("Vulkan Supported: {}", glfw.VulkanSupported)
+    fmt.println("Vulkan Supported: ", glfw.VulkanSupported())
 
     window := glfw.CreateWindow(1600, 900, "Vulkan window", nil, nil);
-    
+
     appInfo : vk.ApplicationInfo;
     appInfo.sType = vk.StructureType.APPLICATION_INFO;
     appInfo.pApplicationName = "Hello Triangle"
@@ -25,7 +25,6 @@ main::proc()
 
     extensionCount : u32 = 0;
     //vk.EnumerateInstanceExtensionProperties(nil, &extensionCount, nil);
-    fmt.printf("Sometest {}", extensionCount)
 
     createInfo : vk.InstanceCreateInfo;
     createInfo.sType = vk.StructureType.INSTANCE_CREATE_INFO;
