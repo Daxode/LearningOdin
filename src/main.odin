@@ -129,17 +129,38 @@ main::proc()
     vk.EnumeratePhysicalDevices(instance, &deviceCount, &devices[0]);
     
     deviceProp : vk.PhysicalDeviceProperties
-    deviceCurrent := devices[0]
+    deviceFeature : vk.PhysicalDeviceFeatures
+    deviceBest : vk.PhysicalDevice
+    deviceBestScore : u32 = 0
     for device in devices {
+        deviceCurrentScore : u32 = 0
         vk.GetPhysicalDeviceProperties(device, &deviceProp)
-        if(deviceProp.deviceType == vk.PhysicalDeviceType.DISCRETE_GPU) {
-            deviceCurrent = device
+        vk.GetPhysicalDeviceFeatures(device, &deviceFeature)
+        if deviceProp.deviceType == vk.PhysicalDeviceType.DISCRETE_GPU {
+            deviceCurrentScore += 1000
         }
+
+        deviceCurrentScore += deviceProp.limits.maxImageDimension2D;
+
+        if(!deviceFeature.geometryShader) {
+            deviceCurrentScore = 0
+        }
+
+        if deviceCurrentScore > deviceBestScore {
+            deviceBest = device
+            deviceBestScore = deviceCurrentScore
+        }
+
         when ODIN_DEBUG {
             fmt.println(strings.string_from_nul_terminated_ptr(&deviceProp.deviceName[0], vk.MAX_PHYSICAL_DEVICE_NAME_SIZE))
         }
     }
 
+    when ODIN_DEBUG {
+        vk.GetPhysicalDeviceProperties(deviceBest, &deviceProp)
+        fmt.println("GPU found: ", strings.string_from_nul_terminated_ptr(&deviceProp.deviceName[0], vk.MAX_PHYSICAL_DEVICE_NAME_SIZE))
+    }
+    
     // Main loop
     for !glfw.WindowShouldClose(window) {
         glfw.PollEvents();
@@ -148,7 +169,7 @@ main::proc()
     when ODIN_DEBUG {
         DestroyDebugUtilsMessengerEXT := transmute(vk.ProcDestroyDebugUtilsMessengerEXT) vk.GetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
         if (DestroyDebugUtilsMessengerEXT != nil) {
-            //DestroyDebugUtilsMessengerEXT(instance, debugMessengerEXT, nil);
+            DestroyDebugUtilsMessengerEXT(instance, debugMessengerEXT, nil);
         }
     }
 
