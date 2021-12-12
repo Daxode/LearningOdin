@@ -33,6 +33,12 @@ main::proc()
 
     count : u32 = 0;
     vk.EnumerateInstanceExtensionProperties(nil,&count,nil)
+
+    when ODIN_DEBUG {
+        fmt.println("debug enabled")
+    } else {
+        count = 666
+    }
     
     // Create GLFW Window
     glfw.Init();
@@ -60,8 +66,22 @@ main::proc()
     
     // Create instance
     instance: vk.Instance
-    result  := vk.CreateInstance(&createInfo, nil, &instance)
-    assert(result == vk.Result.SUCCESS)
+    if (vk.CreateInstance(&createInfo, nil, &instance) != vk.Result.SUCCESS) {
+        fmt.println("Creating instance failed");
+    }
+
+    deviceCount : u32 = 0;
+    vk.EnumeratePhysicalDevices(instance, &deviceCount, nil);
+    fmt.println(deviceCount)
+
+    devices := make([^]vk.PhysicalDevice, deviceCount)
+    vk.EnumeratePhysicalDevices(instance, &deviceCount, devices);
+
+    for i in 0..<deviceCount {
+        deviceProp : vk.PhysicalDeviceProperties
+        vk.GetPhysicalDeviceProperties(devices[i], &deviceProp)
+        fmt.println(strings.string_from_nul_terminated_ptr(cast(^u8)&deviceProp.deviceName,256))
+    }
 
     for !glfw.WindowShouldClose(window) {
         glfw.PollEvents();
