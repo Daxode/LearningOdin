@@ -41,17 +41,17 @@ main::proc()
     glfw.WindowHint(glfw.RESIZABLE, 0);
     window := glfw.CreateWindow(1600, 900, "Vulkan Fun", nil, nil);
 
-    // Get instance properties
-    instanceLayerPropCount : u32 = 0;
-    vk.EnumerateInstanceLayerProperties(&instanceLayerPropCount,nil)
-    instanceLayerProps := make([]vk.LayerProperties,instanceLayerPropCount)
-    defer delete(instanceLayerProps)
-    vk.EnumerateInstanceLayerProperties(&instanceLayerPropCount, raw_data(instanceLayerProps))
+    // Get layers
+    layerCount : u32 = 0;
+    vk.EnumerateInstanceLayerProperties(&layerCount,nil)
+    layers := make([]vk.LayerProperties,layerCount)
+    defer delete(layers)
+    vk.EnumerateInstanceLayerProperties(&layerCount, raw_data(layers))
 
     when ODIN_DEBUG {
         doesKHRValLayerExist := false
-        for prop in &instanceLayerProps {
-            layerName := strings.string_from_nul_terminated_ptr(&prop.layerName[0], vk.MAX_PHYSICAL_DEVICE_NAME_SIZE)
+        for layer in &layers {
+            layerName := strings.string_from_nul_terminated_ptr(&layer.layerName[0], vk.MAX_PHYSICAL_DEVICE_NAME_SIZE)
             fmt.println(layerName)
             doesKHRValLayerExist |= layerName == "VK_LAYER_KHRONOS_validation"
         }
@@ -89,11 +89,36 @@ main::proc()
         createInfo.ppEnabledExtensionNames = raw_data(requiredInstanceExtensions);
         createInfo.enabledExtensionCount = u32(len(requiredInstanceExtensions));
     }
-    
+
+    // Create Debugger
+    when ODIN_DEBUG {
+        debugCreateInfo: vk.DebugUtilsMessengerCreateInfoEXT
+        debugCreateInfo.sType = vk.StructureType.DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT
+        debugCreateInfo.messageSeverity = {.VERBOSE, .INFO, .WARNING, .ERROR}
+        debugCreateInfo.messageType = {.GENERAL, .VALIDATION, .PERFORMANCE}
+        debugCreateInfo.pfnUserCallback = vk.ProcDebugUtilsMessengerCallbackEXT(proc(
+            messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT, messageTypes: vk.DebugUtilsMessageTypeFlagsEXT, 
+            pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT, pUserData: rawptr) {
+                fmt.println(pCallbackData^.pMessage)
+        })
+
+        createInfo.pNext = cast(rawptr) &debugCreateInfo
+    }
+
     // Create instance
     instance: vk.Instance
     if (vk.CreateInstance(&createInfo, nil, &instance) != vk.Result.SUCCESS) {
-        fmt.println("Creating instance failed");
+        panic("Creating instance failed");
+    }
+    
+    when ODIN_DEBUG {
+        debugMessengerEXT:vk.DebugUtilsMessengerEXT
+        CreateDebugUtilsMessengerEXT := transmute(vk.ProcCreateDebugUtilsMessengerEXT) vk.GetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+        if (CreateDebugUtilsMessengerEXT != nil) {
+            CreateDebugUtilsMessengerEXT(instance, &debugCreateInfo, nil, &debugMessengerEXT)
+        } else {
+            panic("vk.Result.ERROR_EXTENSION_NOT_PRESENT");
+        }
     }
 
     // Get the physical device
@@ -120,6 +145,14 @@ main::proc()
         glfw.PollEvents();
     }
 
+    when ODIN_DEBUG {
+        DestroyDebugUtilsMessengerEXT := transmute(vk.ProcDestroyDebugUtilsMessengerEXT) vk.GetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+        if (DestroyDebugUtilsMessengerEXT != nil) {
+            //DestroyDebugUtilsMessengerEXT(instance, debugMessengerEXT, nil);
+        }
+    }
+
+    vk.DestroyInstance(instance, nil)
     glfw.DestroyWindow(window);
     glfw.Terminate();
 }
