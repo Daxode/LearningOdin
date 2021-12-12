@@ -107,13 +107,16 @@ main::proc()
 
     // Create instance
     instance: vk.Instance
-    if (vk.CreateInstance(&createInfo, nil, &instance) != vk.Result.SUCCESS) {
-        panic("Creating instance failed");
+    resultCreateInstance := vk.CreateInstance(&createInfo, nil, &instance)
+    when ODIN_DEBUG { 
+        if (resultCreateInstance != vk.Result.SUCCESS) {
+            panic("Creating instance failed");
+        }
     }
     
     when ODIN_DEBUG {
         debugMessengerEXT:vk.DebugUtilsMessengerEXT
-        CreateDebugUtilsMessengerEXT := transmute(vk.ProcCreateDebugUtilsMessengerEXT) vk.GetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+        CreateDebugUtilsMessengerEXT := vk.ProcCreateDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
         if (CreateDebugUtilsMessengerEXT != nil) {
             CreateDebugUtilsMessengerEXT(instance, &debugCreateInfo, nil, &debugMessengerEXT)
         } else {
@@ -142,9 +145,7 @@ main::proc()
 
         deviceCurrentScore += deviceProp.limits.maxImageDimension2D;
 
-        if(!deviceFeature.geometryShader) {
-            deviceCurrentScore = 0
-        }
+        deviceCurrentScore *= u32(deviceFeature.geometryShader)
 
         if deviceCurrentScore > deviceBestScore {
             deviceBest = device
@@ -160,14 +161,33 @@ main::proc()
         vk.GetPhysicalDeviceProperties(deviceBest, &deviceProp)
         fmt.println("GPU found: ", strings.string_from_nul_terminated_ptr(&deviceProp.deviceName[0], vk.MAX_PHYSICAL_DEVICE_NAME_SIZE))
     }
-    
+
+    // Get Queue
+    qFamilyCount : u32 = 0
+    vk.GetPhysicalDeviceQueueFamilyProperties(deviceBest, &qFamilyCount, nil)
+    qFamilies := make([]vk.QueueFamilyProperties, qFamilyCount)
+    vk.GetPhysicalDeviceQueueFamilyProperties(deviceBest, &qFamilyCount, raw_data(qFamilies))
+    graphicsFamIndex : Maybe(u32)
+    for qFamily, i in qFamilies {
+        if vk.QueueFlag.GRAPHICS in qFamily.queueFlags {
+            graphicsFamIndex = u32(i)
+        }
+    }
+
+    deviceQCreateInfo : vk.DeviceQueueCreateInfo
+    deviceQCreateInfo.sType = vk.StructureType.DEVICE_QUEUE_CREATE_INFO
+    deviceQCreateInfo.queueFamilyIndex = graphicsFamIndex.?
+    deviceQCreateInfo.queueCount = 1
+    queuePriority : f32 = 1
+    deviceQCreateInfo.pQueuePriorities = &queuePriority
+
     // Main loop
     for !glfw.WindowShouldClose(window) {
         glfw.PollEvents();
     }
 
     when ODIN_DEBUG {
-        DestroyDebugUtilsMessengerEXT := transmute(vk.ProcDestroyDebugUtilsMessengerEXT) vk.GetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+        DestroyDebugUtilsMessengerEXT := vk.ProcDestroyDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"));
         if (DestroyDebugUtilsMessengerEXT != nil) {
             DestroyDebugUtilsMessengerEXT(instance, debugMessengerEXT, nil);
         }
