@@ -166,32 +166,35 @@ main::proc()
             fmt.println("GPU found: ", strings.string_from_nul_terminated_ptr(&deviceProp.deviceName[0], vk.MAX_PHYSICAL_DEVICE_NAME_SIZE))
         }
     }
-
-    // Get Queue
-    qFamilyCount : u32 = 0
-    vk.GetPhysicalDeviceQueueFamilyProperties(devicePicked, &qFamilyCount, nil)
-    qFamilies := make([]vk.QueueFamilyProperties, qFamilyCount)
-    defer delete(qFamilies)
-    vk.GetPhysicalDeviceQueueFamilyProperties(devicePicked, &qFamilyCount, raw_data(qFamilies))
-    graphicsFamIndex : Maybe(u32)
-    for qFamily, i in qFamilies {
-        if vk.QueueFlag.GRAPHICS in qFamily.queueFlags {
-            graphicsFamIndex = u32(i)
-        }
-    }
-
-    deviceQCreateInfo : vk.DeviceQueueCreateInfo
-    deviceQCreateInfo.sType = vk.StructureType.DEVICE_QUEUE_CREATE_INFO
-    deviceQCreateInfo.queueFamilyIndex = graphicsFamIndex.?
-    deviceQCreateInfo.queueCount = 1
-    queuePriority : f32 = 1
-    deviceQCreateInfo.pQueuePriorities = &queuePriority
-
+    
     // Create Logical Device
-    deviceFeature : vk.PhysicalDeviceFeatures
-    vk.GetPhysicalDeviceFeatures(devicePicked, &deviceFeature)
-    deviceCreateInfo : vk.DeviceCreateInfo
-    deviceCreateInfo.sType = vk.StructureType.DEVICE_CREATE_INFO
+    graphicsFamIndex : Maybe(u32)
+    {
+        // Get Queue Family
+        qFamilyCount : u32 = 0
+        vk.GetPhysicalDeviceQueueFamilyProperties(devicePicked, &qFamilyCount, nil)
+        qFamilies := make([]vk.QueueFamilyProperties, qFamilyCount)
+        defer delete(qFamilies)
+        vk.GetPhysicalDeviceQueueFamilyProperties(devicePicked, &qFamilyCount, raw_data(qFamilies))
+        for qFamily, i in qFamilies {
+            if vk.QueueFlag.GRAPHICS in qFamily.queueFlags {
+                graphicsFamIndex = u32(i)
+            }
+        }
+
+        deviceQCreateInfo : vk.DeviceQueueCreateInfo
+        deviceQCreateInfo.sType = vk.StructureType.DEVICE_QUEUE_CREATE_INFO
+        deviceQCreateInfo.queueFamilyIndex = graphicsFamIndex.?
+        deviceQCreateInfo.queueCount = 1
+        queuePriority : f32 = 1
+        deviceQCreateInfo.pQueuePriorities = &queuePriority
+
+        // Create Logical Device
+        deviceFeature : vk.PhysicalDeviceFeatures
+        vk.GetPhysicalDeviceFeatures(devicePicked, &deviceFeature)
+        deviceCreateInfo : vk.DeviceCreateInfo
+        deviceCreateInfo.sType = vk.StructureType.DEVICE_CREATE_INFO
+    }
 
     // Create GLFW Window
     window: glfw.WindowHandle
