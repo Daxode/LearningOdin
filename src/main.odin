@@ -68,7 +68,7 @@ main::proc()
     }
 
     // Create Instance and External Debug Messenger
-    instance: vk.Instance
+    vkInstance: vk.Instance
     when ODIN_DEBUG {debugMessengerEXT: vk.DebugUtilsMessengerEXT}
     {
         createInfo : vk.InstanceCreateInfo;
@@ -121,17 +121,17 @@ main::proc()
         }
 
         // Create instance
-        resultCreateInstance := vk.CreateInstance(&createInfo, nil, &instance)
+        resultCreateInstance := vk.CreateInstance(&createInfo, nil, &vkInstance)
         when ODIN_DEBUG { 
             if (resultCreateInstance != vk.Result.SUCCESS) {
-                panic("Creating instance failed");
+                panic("Creating Vulkan instance failed");
             }
         }
 
         when ODIN_DEBUG {
-            CreateDebugUtilsMessengerEXT := vk.ProcCreateDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
+            CreateDebugUtilsMessengerEXT := vk.ProcCreateDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(vkInstance, "vkCreateDebugUtilsMessengerEXT"));
             if (CreateDebugUtilsMessengerEXT != nil) {
-                CreateDebugUtilsMessengerEXT(instance, &debugCreateInfo, nil, &debugMessengerEXT)
+                CreateDebugUtilsMessengerEXT(vkInstance, &debugCreateInfo, nil, &debugMessengerEXT)
             } else {
                 panic("vk.Result.ERROR_EXTENSION_NOT_PRESENT");
             }
@@ -142,10 +142,10 @@ main::proc()
     devicePicked: vk.PhysicalDevice
     {
         deviceCount : u32 = 0;
-        vk.EnumeratePhysicalDevices(instance, &deviceCount, nil)
+        vk.EnumeratePhysicalDevices(vkInstance, &deviceCount, nil)
         devices := make([]vk.PhysicalDevice, deviceCount)
         defer delete(devices)
-        vk.EnumeratePhysicalDevices(instance, &deviceCount, &devices[0])
+        vk.EnumeratePhysicalDevices(vkInstance, &deviceCount, &devices[0])
         
         deviceBestScore : u32 = 0
         for device in devices {
@@ -247,28 +247,39 @@ main::proc()
     }
 
     // Create GLFW Window
-    window: glfw.WindowHandle
+    windowHandle: glfw.WindowHandle
     {
         glfw.Init();
         glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
         glfw.WindowHint(glfw.RESIZABLE, 0);
-        window = glfw.CreateWindow(1600, 900, "Vulkan Fun", nil, nil);
+        windowHandle = glfw.CreateWindow(1600, 900, "Vulkan Fun", nil, nil);
+    }
+
+    surfaceKHR : vk.SurfaceKHR
+    {
+        resultCreateWindowSurface := glfw.CreateWindowSurface(vkInstance, windowHandle, nil, &surfaceKHR)
+        when ODIN_DEBUG { 
+            if (resultCreateWindowSurface != vk.Result.SUCCESS) {
+                panic("Creating instance failed")
+            }
+        }
     }
 
     // Main loop
-    for !glfw.WindowShouldClose(window) {
+    for !glfw.WindowShouldClose(windowHandle) {
         glfw.PollEvents();
     }
 
     when ODIN_DEBUG {
-        DestroyDebugUtilsMessengerEXT := vk.ProcDestroyDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"));
+        DestroyDebugUtilsMessengerEXT := vk.ProcDestroyDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(vkInstance, "vkDestroyDebugUtilsMessengerEXT"));
         if (DestroyDebugUtilsMessengerEXT != nil) {
-            DestroyDebugUtilsMessengerEXT(instance, debugMessengerEXT, nil);
+            DestroyDebugUtilsMessengerEXT(vkInstance, debugMessengerEXT, nil);
         }
     }
 
     vk.DestroyDevice(logicalDevice, nil)
-    vk.DestroyInstance(instance, nil)
-    glfw.DestroyWindow(window);
+    vk.DestroySurfaceKHR(instance, surfaceKHR, nil)
+    vk.DestroyInstance(vkInstance, nil)
+    glfw.DestroyWindow(windowHandle);
     glfw.Terminate();
 }
