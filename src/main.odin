@@ -34,15 +34,6 @@ main::proc()
     when ODIN_DEBUG {
         fmt.println("debug enabled")
     }
-    
-    // Create GLFW Window
-    window : glfw.WindowHandle
-    {
-        glfw.Init();
-        glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
-        glfw.WindowHint(glfw.RESIZABLE, 0);
-        window = glfw.CreateWindow(1600, 900, "Vulkan Fun", nil, nil);
-    }
 
     // Check validation layers
     {        
@@ -78,7 +69,7 @@ main::proc()
 
     // Create Instance and External Debug Messenger
     instance: vk.Instance
-    debugMessengerEXT:vk.DebugUtilsMessengerEXT
+    debugMessengerEXT: vk.DebugUtilsMessengerEXT
     {
         createInfo : vk.InstanceCreateInfo;
         createInfo.sType = vk.StructureType.INSTANCE_CREATE_INFO;
@@ -134,13 +125,13 @@ main::proc()
     }
 
     // Pick the physical device
-    devicePicked : vk.PhysicalDevice
+    devicePicked: vk.PhysicalDevice
     {
         deviceCount : u32 = 0;
-        vk.EnumeratePhysicalDevices(instance, &deviceCount, nil);
+        vk.EnumeratePhysicalDevices(instance, &deviceCount, nil)
         devices := make([]vk.PhysicalDevice, deviceCount)
         defer delete(devices)
-        vk.EnumeratePhysicalDevices(instance, &deviceCount, &devices[0]);
+        vk.EnumeratePhysicalDevices(instance, &deviceCount, &devices[0])
         
         deviceBestScore : u32 = 0
         for device in devices {
@@ -170,6 +161,7 @@ main::proc()
         }
 
         when ODIN_DEBUG {
+            deviceProp : vk.PhysicalDeviceProperties
             vk.GetPhysicalDeviceProperties(devicePicked, &deviceProp)
             fmt.println("GPU found: ", strings.string_from_nul_terminated_ptr(&deviceProp.deviceName[0], vk.MAX_PHYSICAL_DEVICE_NAME_SIZE))
         }
@@ -196,11 +188,19 @@ main::proc()
     deviceQCreateInfo.pQueuePriorities = &queuePriority
 
     // Create Logical Device
+    deviceFeature : vk.PhysicalDeviceFeatures
     vk.GetPhysicalDeviceFeatures(devicePicked, &deviceFeature)
     deviceCreateInfo : vk.DeviceCreateInfo
     deviceCreateInfo.sType = vk.StructureType.DEVICE_CREATE_INFO
 
-
+    // Create GLFW Window
+    window: glfw.WindowHandle
+    {
+        glfw.Init();
+        glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
+        glfw.WindowHint(glfw.RESIZABLE, 0);
+        window = glfw.CreateWindow(1600, 900, "Vulkan Fun", nil, nil);
+    }
 
     // Main loop
     for !glfw.WindowShouldClose(window) {
