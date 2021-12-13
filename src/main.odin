@@ -162,12 +162,6 @@ main::proc()
     devicePicked: vk.PhysicalDevice
     graphicsFamIndex : u32
     presentFamIndex : u32
-
-    QueueFamilySupports :: distinct bit_set[QueueFamilySupport; u8]
-    QueueFamilySupport :: enum u8 {GRAPHICS,PRESENTATION}
-    qFamiliesSupports : []QueueFamilySupports
-    defer delete(qFamilies)
-    
     {
         // Retrieve Physical Devices
         deviceCount : u32 = 0;
@@ -193,23 +187,22 @@ main::proc()
             qFamilies := make([]vk.QueueFamilyProperties, qFamilyCount)
             vk.GetPhysicalDeviceQueueFamilyProperties(device, &qFamilyCount, raw_data(qFamilies))
 
+            QueueFamilySupports :: distinct bit_set[QueueFamilySupport; u8]
+            QueueFamilySupport :: enum u8 {GRAPHICS, PRESENTATION}
             qFamiliesSupported : QueueFamilySupports
-            qFamiliesSupports = make([]QueueFamilySupports, qFamilyCount)
-            defer delete(supportsFounds)
             for qFamily, i in qFamilies {
                 index := u32(i)
                 if vk.QueueFlag.GRAPHICS in qFamily.queueFlags {
                     graphicsFamIndex = index
-                    supportsFounds[i] |= {.GRAPHICS}
+                    qFamiliesSupported |= {.GRAPHICS}
                 }
 
                 presentSupport : b32 = false
                 vk.GetPhysicalDeviceSurfaceSupportKHR(device, index, surfaceKHR, &presentSupport)
                 if (presentSupport) {
                     presentFamIndex = index
-                    supportsFounds[i] |= {.PRESENTATION}
+                    qFamiliesSupported |= {.PRESENTATION}
                 }
-                qFamiliesSupported |= supportsFounds[i]
             }
 
             // Calculate Score
@@ -243,6 +236,9 @@ main::proc()
     // Create Logical Device
     logicalDevice : vk.Device
     {
+        SetU32 :: bit_set[0..<10;u32]
+        something : SetU32 = {1,2}
+
         // Setup Queue Device CreateInfo
         queuePriority : f32 = 1
         deviceQCreateInfo := vk.DeviceQueueCreateInfo {
