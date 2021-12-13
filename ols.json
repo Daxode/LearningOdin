@@ -1,8 +1,7 @@
 {
-    "collections": [{ "name": "core", "path": "C:/Users/daniel.andersen/Documents/git/lang/Odin/core" },
-                    { "name": "shared", "path": "C:/Users/daniel.andersen/Documents/git/lang/playzone/LearningOdin/src" },
-                    { "name": "vendor", "path": "C:/Users/daniel.andersen/Documents/git/lang/playzone/LearningOdin/src/vendor" },
-                    { "name": "vulkan", "path": "C:/Users/daniel.andersen/Documents/git/lang/playzone/LearningOdin/src/vendor/vulkan" }],
+    "collections": [{ "name": "core", "path": "../../Odin/core" },
+                    { "name": "shared", "path": "src" },
+                    { "name": "vendor", "path": "../../Odin/vendor" }],
     "thread_pool_count": 4,
     "enable_document_symbols": true,
     "enable_semantic_tokens": false,
