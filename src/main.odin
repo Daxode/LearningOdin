@@ -69,7 +69,7 @@ main::proc()
 
     // Create Instance and External Debug Messenger
     instance: vk.Instance
-    debugMessengerEXT: vk.DebugUtilsMessengerEXT
+    when ODIN_DEBUG {debugMessengerEXT: vk.DebugUtilsMessengerEXT}
     {
         createInfo : vk.InstanceCreateInfo;
         createInfo.sType = vk.StructureType.INSTANCE_CREATE_INFO;
