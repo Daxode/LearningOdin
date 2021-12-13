@@ -170,7 +170,7 @@ main::proc()
     // Create Logical Device
     graphicsFamIndex : Maybe(u32)
     {
-        // Get Queue Family
+        // Get Queue Family indicies
         qFamilyCount : u32 = 0
         vk.GetPhysicalDeviceQueueFamilyProperties(devicePicked, &qFamilyCount, nil)
         qFamilies := make([]vk.QueueFamilyProperties, qFamilyCount)
@@ -182,12 +182,14 @@ main::proc()
             }
         }
 
-        deviceQCreateInfo : vk.DeviceQueueCreateInfo
-        deviceQCreateInfo.sType = vk.StructureType.DEVICE_QUEUE_CREATE_INFO
-        deviceQCreateInfo.queueFamilyIndex = graphicsFamIndex.?
-        deviceQCreateInfo.queueCount = 1
+        // Create Queue Device CreateInfo
         queuePriority : f32 = 1
-        deviceQCreateInfo.pQueuePriorities = &queuePriority
+        deviceQCreateInfo := vk.DeviceQueueCreateInfo {
+            sType = vk.StructureType.DEVICE_QUEUE_CREATE_INFO,
+            queueFamilyIndex = graphicsFamIndex.?,
+            queueCount = 1,
+            pQueuePriorities = &queuePriority,
+        }
 
         // Create Logical Device
         deviceFeature : vk.PhysicalDeviceFeatures
