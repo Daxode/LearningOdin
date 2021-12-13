@@ -74,9 +74,11 @@ main::proc()
         createInfo : vk.InstanceCreateInfo;
         createInfo.sType = vk.StructureType.INSTANCE_CREATE_INFO;
         createInfo.pApplicationInfo = &appInfo;
-        createInfo.enabledLayerCount = 1
-        layerKHRVal : cstring = "VK_LAYER_KHRONOS_validation"
-        createInfo.ppEnabledLayerNames = &layerKHRVal
+        when ODIN_DEBUG {
+            createInfo.enabledLayerCount = 1
+            layerKHRVal : cstring = "VK_LAYER_KHRONOS_validation"
+            createInfo.ppEnabledLayerNames = &layerKHRVal
+        }
 
         requiredInstanceExtensions := glfw.GetRequiredInstanceExtensions();
         when ODIN_DEBUG {
@@ -93,29 +95,27 @@ main::proc()
 
         // Create Debugger
         when ODIN_DEBUG {
-            debugCreateInfo: vk.DebugUtilsMessengerCreateInfoEXT
-            debugCreateInfo.sType = vk.StructureType.DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT
-            debugCreateInfo.messageSeverity = {.VERBOSE, .INFO, .WARNING, .ERROR}
-            debugCreateInfo.messageType = {.GENERAL, .VALIDATION, .PERFORMANCE}
-            debugCreateInfo.pfnUserCallback = vk.ProcDebugUtilsMessengerCallbackEXT(proc(
-                msgSeverity: vk.DebugUtilsMessageSeverityFlagsEXT, msgTypes: vk.DebugUtilsMessageTypeFlagsEXT, 
-                pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT, pUserData: rawptr) {
-                    severityString := ""
-                    if .VERBOSE in msgSeverity {
-                        severityString = "VK[V]:"
-                    }
-                    if .INFO in msgSeverity {
-                        severityString = "VK[I]:"
-                    }
-                    if .WARNING in msgSeverity {
-                        severityString = "VK[W]:"
-                    }
-                    if .ERROR in msgSeverity {
-                        severityString = "VK[E]:"
-                    }
+            debugCreateInfo := vk.DebugUtilsMessengerCreateInfoEXT {
+                sType = vk.StructureType.DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+                messageSeverity = {.VERBOSE, .INFO, .WARNING, .ERROR},
+                messageType = {.GENERAL, .VALIDATION, .PERFORMANCE},
+                pfnUserCallback = vk.ProcDebugUtilsMessengerCallbackEXT(proc(
+                    msgSeverity: vk.DebugUtilsMessageSeverityFlagsEXT, msgTypes: vk.DebugUtilsMessageTypeFlagsEXT, 
+                    pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT, pUserData: rawptr) {
+                        severityString := ""
+                        if .VERBOSE in msgSeverity {
+                            severityString = "VK[V]:"
+                        } else if .INFO in msgSeverity {
+                            severityString = "VK[I]:"
+                        } else if .WARNING in msgSeverity {
+                            severityString = "VK[W]:"
+                        } else if .ERROR in msgSeverity {
+                            severityString = "VK[E]:"
+                        }
 
-                    fmt.println(severityString, pCallbackData^.pMessage)
-            })
+                        fmt.println(severityString, pCallbackData^.pMessage)
+                    }),
+            }
 
             createInfo.pNext = cast(rawptr) &debugCreateInfo
         }
@@ -182,7 +182,8 @@ main::proc()
     }
     
     // Create Logical Device
-    graphicsFamIndex : Maybe(u32)
+    graphicsFamIndex : u32
+    logicalDevice : vk.Device
     {
         // Get Queue Family indicies
         qFamilyCount : u32 = 0
@@ -190,9 +191,17 @@ main::proc()
         qFamilies := make([]vk.QueueFamilyProperties, qFamilyCount)
         defer delete(qFamilies)
         vk.GetPhysicalDeviceQueueFamilyProperties(devicePicked, &qFamilyCount, raw_data(qFamilies))
+        when ODIN_DEBUG { graphicsQueueFamilyFound := false }
         for qFamily, i in qFamilies {
             if vk.QueueFlag.GRAPHICS in qFamily.queueFlags {
                 graphicsFamIndex = u32(i)
+                when ODIN_DEBUG { graphicsQueueFamilyFound = true }
+            }
+        }
+
+        when ODIN_DEBUG { 
+            if !graphicsQueueFamilyFound { 
+                panic("No graphics queue familiy found")
             }
         }
 
@@ -200,7 +209,7 @@ main::proc()
         queuePriority : f32 = 1
         deviceQCreateInfo := vk.DeviceQueueCreateInfo {
             sType = vk.StructureType.DEVICE_QUEUE_CREATE_INFO,
-            queueFamilyIndex = graphicsFamIndex.?,
+            queueFamilyIndex = graphicsFamIndex,
             queueCount = 1,
             pQueuePriorities = &queuePriority,
         }
@@ -214,6 +223,27 @@ main::proc()
             pQueueCreateInfos = &deviceQCreateInfo,
             pEnabledFeatures = &deviceFeature,
         }
+
+        when ODIN_DEBUG {
+            deviceCreateInfo.enabledLayerCount = 1
+            layerKHRVal : cstring = "VK_LAYER_KHRONOS_validation"
+            deviceCreateInfo.ppEnabledLayerNames = &layerKHRVal
+        }
+
+        // Create instance
+        resultCreateDevice := vk.CreateDevice(devicePicked, &deviceCreateInfo, nil, &logicalDevice)
+        when ODIN_DEBUG { 
+            if (resultCreateDevice != vk.Result.SUCCESS) {
+                panic("Creating instance failed")
+            }
+        }
+    }
+
+    // Get Graphics Queue
+    {
+        graphicsQ : vk.Queue
+        vk.GetDeviceQueue(logicalDevice, graphicsFamIndex, 0, &graphicsQ)
+        fmt.println(graphicsQ)
     }
 
     // Create GLFW Window
@@ -237,6 +267,7 @@ main::proc()
         }
     }
 
+    vk.DestroyDevice(logicalDevice, nil)
     vk.DestroyInstance(instance, nil)
     glfw.DestroyWindow(window);
     glfw.Terminate();
