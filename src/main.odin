@@ -138,6 +138,26 @@ main::proc()
         }
     }
 
+    // Create GLFW Window
+    windowHandle: glfw.WindowHandle
+    {
+        glfw.Init();
+        glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
+        glfw.WindowHint(glfw.RESIZABLE, 0);
+        windowHandle = glfw.CreateWindow(1600, 900, "Vulkan Fun", nil, nil);
+    }
+
+    // Get window surface
+    surfaceKHR : vk.SurfaceKHR
+    {
+        resultCreateWindowSurface := glfw.CreateWindowSurface(vkInstance, windowHandle, nil, &surfaceKHR)
+        when ODIN_DEBUG { 
+            if (resultCreateWindowSurface != vk.Result.SUCCESS) {
+                panic("Creating instance failed")
+            }
+        }
+    }
+
     // Pick the physical device
     devicePicked: vk.PhysicalDevice
     {
@@ -178,26 +198,6 @@ main::proc()
             deviceProp : vk.PhysicalDeviceProperties
             vk.GetPhysicalDeviceProperties(devicePicked, &deviceProp)
             fmt.println("GPU found: ", strings.string_from_nul_terminated_ptr(&deviceProp.deviceName[0], vk.MAX_PHYSICAL_DEVICE_NAME_SIZE))
-        }
-    }
-
-    // Create GLFW Window
-    windowHandle: glfw.WindowHandle
-    {
-        glfw.Init();
-        glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
-        glfw.WindowHint(glfw.RESIZABLE, 0);
-        windowHandle = glfw.CreateWindow(1600, 900, "Vulkan Fun", nil, nil);
-    }
-
-    // Get window surface
-    surfaceKHR : vk.SurfaceKHR
-    {
-        resultCreateWindowSurface := glfw.CreateWindowSurface(vkInstance, windowHandle, nil, &surfaceKHR)
-        when ODIN_DEBUG { 
-            if (resultCreateWindowSurface != vk.Result.SUCCESS) {
-                panic("Creating instance failed")
-            }
         }
     }
     
