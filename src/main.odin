@@ -35,6 +35,15 @@ main::proc()
         fmt.println("debug enabled")
     }
 
+    // Create GLFW Window
+    windowHandle: glfw.WindowHandle
+    {
+        glfw.Init();
+        glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
+        glfw.WindowHint(glfw.RESIZABLE, 0);
+        windowHandle = glfw.CreateWindow(1600, 900, "Vulkan Fun", nil, nil);
+    }
+
     // Check validation layers
     {        
         when ODIN_DEBUG {
@@ -138,15 +147,6 @@ main::proc()
         }
     }
 
-    // Create GLFW Window
-    windowHandle: glfw.WindowHandle
-    {
-        glfw.Init();
-        glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
-        glfw.WindowHint(glfw.RESIZABLE, 0);
-        windowHandle = glfw.CreateWindow(1600, 900, "Vulkan Fun", nil, nil);
-    }
-
     // Get window surface
     surfaceKHR : vk.SurfaceKHR
     {
@@ -160,22 +160,59 @@ main::proc()
 
     // Pick the physical device
     devicePicked: vk.PhysicalDevice
+    graphicsFamIndex : u32
+    presentFamIndex : u32
+
+    QueueFamilySupports :: distinct bit_set[QueueFamilySupport; u8]
+    QueueFamilySupport :: enum u8 {GRAPHICS,PRESENTATION}
+    qFamiliesSupports : []QueueFamilySupports
+    defer delete(qFamilies)
+    
     {
+        // Retrieve Physical Devices
         deviceCount : u32 = 0;
         vk.EnumeratePhysicalDevices(vkInstance, &deviceCount, nil)
         devices := make([]vk.PhysicalDevice, deviceCount)
         defer delete(devices)
         vk.EnumeratePhysicalDevices(vkInstance, &deviceCount, &devices[0])
         
+        // Get most suited device
         deviceBestScore : u32 = 0
         for device in devices {
             deviceCurrentScore : u32 = 0
             
+            // Retrieve Device Data
             deviceProp : vk.PhysicalDeviceProperties
             vk.GetPhysicalDeviceProperties(device, &deviceProp)
             deviceFeature : vk.PhysicalDeviceFeatures
             vk.GetPhysicalDeviceFeatures(device, &deviceFeature)
             
+            // Get Queue Family indicies
+            qFamilyCount : u32 = 0
+            vk.GetPhysicalDeviceQueueFamilyProperties(device, &qFamilyCount, nil)
+            qFamilies := make([]vk.QueueFamilyProperties, qFamilyCount)
+            vk.GetPhysicalDeviceQueueFamilyProperties(device, &qFamilyCount, raw_data(qFamilies))
+
+            qFamiliesSupported : QueueFamilySupports
+            qFamiliesSupports = make([]QueueFamilySupports, qFamilyCount)
+            defer delete(supportsFounds)
+            for qFamily, i in qFamilies {
+                index := u32(i)
+                if vk.QueueFlag.GRAPHICS in qFamily.queueFlags {
+                    graphicsFamIndex = index
+                    supportsFounds[i] |= {.GRAPHICS}
+                }
+
+                presentSupport : b32 = false
+                vk.GetPhysicalDeviceSurfaceSupportKHR(device, index, surfaceKHR, &presentSupport)
+                if (presentSupport) {
+                    presentFamIndex = index
+                    supportsFounds[i] |= {.PRESENTATION}
+                }
+                qFamiliesSupported |= supportsFounds[i]
+            }
+
+            // Calculate Score
             if deviceProp.deviceType == vk.PhysicalDeviceType.DISCRETE_GPU {
                 deviceCurrentScore += 1000
             }
@@ -183,7 +220,9 @@ main::proc()
             deviceCurrentScore += deviceProp.limits.maxImageDimension2D;
 
             deviceCurrentScore *= u32(deviceFeature.geometryShader)
+            deviceCurrentScore *= u32(qFamiliesSupported == {.GRAPHICS, .PRESENTATION})
 
+            // Resolve Score
             if deviceCurrentScore > deviceBestScore {
                 devicePicked = device
                 deviceBestScore = deviceCurrentScore
@@ -202,29 +241,8 @@ main::proc()
     }
     
     // Create Logical Device
-    graphicsFamIndex : u32
     logicalDevice : vk.Device
     {
-        // Get Queue Family indicies
-        qFamilyCount : u32 = 0
-        vk.GetPhysicalDeviceQueueFamilyProperties(devicePicked, &qFamilyCount, nil)
-        qFamilies := make([]vk.QueueFamilyProperties, qFamilyCount)
-        defer delete(qFamilies)
-        vk.GetPhysicalDeviceQueueFamilyProperties(devicePicked, &qFamilyCount, raw_data(qFamilies))
-        when ODIN_DEBUG { graphicsQueueFamilyFound := false }
-        for qFamily, i in qFamilies {
-            if vk.QueueFlag.GRAPHICS in qFamily.queueFlags {
-                graphicsFamIndex = u32(i)
-                when ODIN_DEBUG { graphicsQueueFamilyFound = true }
-            }
-        }
-
-        when ODIN_DEBUG { 
-            if !graphicsQueueFamilyFound { 
-                panic("No graphics queue familiy found")
-            }
-        }
-
         // Setup Queue Device CreateInfo
         queuePriority : f32 = 1
         deviceQCreateInfo := vk.DeviceQueueCreateInfo {
@@ -263,7 +281,6 @@ main::proc()
     {
         graphicsQ : vk.Queue
         vk.GetDeviceQueue(logicalDevice, graphicsFamIndex, 0, &graphicsQ)
-        fmt.println(graphicsQ)
     }
 
     // Main loop
@@ -279,7 +296,7 @@ main::proc()
     }
 
     vk.DestroyDevice(logicalDevice, nil)
-    vk.DestroySurfaceKHR(instance, surfaceKHR, nil)
+    vk.DestroySurfaceKHR(vkInstance, surfaceKHR, nil)
     vk.DestroyInstance(vkInstance, nil)
     glfw.DestroyWindow(windowHandle);
     glfw.Terminate();
