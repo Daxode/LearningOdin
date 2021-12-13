@@ -98,9 +98,23 @@ main::proc()
             debugCreateInfo.messageSeverity = {.VERBOSE, .INFO, .WARNING, .ERROR}
             debugCreateInfo.messageType = {.GENERAL, .VALIDATION, .PERFORMANCE}
             debugCreateInfo.pfnUserCallback = vk.ProcDebugUtilsMessengerCallbackEXT(proc(
-                messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT, messageTypes: vk.DebugUtilsMessageTypeFlagsEXT, 
+                msgSeverity: vk.DebugUtilsMessageSeverityFlagsEXT, msgTypes: vk.DebugUtilsMessageTypeFlagsEXT, 
                 pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT, pUserData: rawptr) {
-                    fmt.println(pCallbackData^.pMessage)
+                    severityString := ""
+                    if .VERBOSE in msgSeverity {
+                        severityString = "VK[V]:"
+                    }
+                    if .INFO in msgSeverity {
+                        severityString = "VK[I]:"
+                    }
+                    if .WARNING in msgSeverity {
+                        severityString = "VK[W]:"
+                    }
+                    if .ERROR in msgSeverity {
+                        severityString = "VK[E]:"
+                    }
+
+                    fmt.println(severityString, pCallbackData^.pMessage)
             })
 
             createInfo.pNext = cast(rawptr) &debugCreateInfo
@@ -182,7 +196,7 @@ main::proc()
             }
         }
 
-        // Create Queue Device CreateInfo
+        // Setup Queue Device CreateInfo
         queuePriority : f32 = 1
         deviceQCreateInfo := vk.DeviceQueueCreateInfo {
             sType = vk.StructureType.DEVICE_QUEUE_CREATE_INFO,
@@ -194,8 +208,12 @@ main::proc()
         // Create Logical Device
         deviceFeature : vk.PhysicalDeviceFeatures
         vk.GetPhysicalDeviceFeatures(devicePicked, &deviceFeature)
-        deviceCreateInfo : vk.DeviceCreateInfo
-        deviceCreateInfo.sType = vk.StructureType.DEVICE_CREATE_INFO
+        deviceCreateInfo := vk.DeviceCreateInfo {
+            sType = vk.StructureType.DEVICE_CREATE_INFO,
+            queueCreateInfoCount = 1,
+            pQueueCreateInfos = &deviceQCreateInfo,
+            pEnabledFeatures = &deviceFeature,
+        }
     }
 
     // Create GLFW Window
