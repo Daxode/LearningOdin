@@ -6,6 +6,8 @@ import "core:fmt"
 import "core:dynlib"
 import "core:runtime"
 import "core:strings"
+import "vendor:stb/image"
+import "core:c"
 
 load_vulkan_function_pointers::proc()
 {
@@ -30,7 +32,7 @@ load_vulkan_function_pointers::proc()
 main::proc()
 {
     load_vulkan_function_pointers()
-
+    
     when ODIN_DEBUG {
         fmt.println("debug enabled")
     }
@@ -42,6 +44,12 @@ main::proc()
         glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
         glfw.WindowHint(glfw.RESIZABLE, 0);
         windowHandle = glfw.CreateWindow(1600, 900, "Vulkan Fun", nil, nil);
+        
+        w, h, channels: c.int
+        icon_bytes := image.load("resources/DaxodeProfile.png",&w,&h, &channels, 0)
+        icon := glfw.Image{w,h,icon_bytes}
+        glfw.SetWindowIcon(windowHandle, []glfw.Image{icon})
+        image.image_free(icon_bytes)
     }
 
     // Check validation layers
