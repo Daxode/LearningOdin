@@ -16,7 +16,7 @@
         {
             "label": "Build Release",
             "type": "shell",
-            "command": "odin.exe build ./src -subsystem:window -out:out/release.exe -opt:3",
+            "command": "odin.exe build ./src -subsystem:console -out:out/release.exe -opt:3",
         }
     ]
 }
