@@ -3,9 +3,13 @@ package advent_of_code_d15
 import "core:fmt"
 import "core:os"
 import win32 "core:sys/windows"
+import "core:time"
 
 main::proc()
 {
+    // Get start time
+    start_time := time.tick_now()
+    
     // All three segments could be replaced with `input_bytes, _ := os.read_entire_file("input.txt")`
     
     // Get file handle | Can be replaced with `input_handle, _ = os.open("input.txt")`
@@ -31,19 +35,17 @@ main::proc()
         digit := u32(input_bytes[i] - '0')
         
         // When new line means done parsing one num (218 is '\n'-'0' in u8 underflow)
-        if (digit == 218) {
-            answer += u32(val_fifo[0] < val_fifo[3])
-            val_fifo = transmute([4]u32)(transmute(u128) val_fifo << 32)
-            shift_amount = 1
-            continue
-        } 
-
-        val_fifo[0] += digit * shift_amount
-        shift_amount *= 10
+        eol := u32(digit == 218)
+        answer += eol*u32(val_fifo[0] < val_fifo[3]) // add answer when end of line
+        val_fifo = (transmute([4]u32)(transmute(u128) val_fifo << 32))*eol+(1-eol)*val_fifo // shift buffer when eol
+        val_fifo[0] += (1-eol) * digit*shift_amount // Add when not eol
+        shift_amount = (eol + (1-eol)*shift_amount*10) // Set 1 when eol, otherwise mul shift_amount by 10
     }
-    answer += u32(val_fifo[0] < val_fifo[3])
-    fmt.println(answer)
 
+    // Clean up
     delete(input_bytes)
     win32.CloseHandle(input_handle)
+
+    // Print answer
+    fmt.println(answer,"found in:", time.duration_milliseconds(time.tick_diff(start_time, time.tick_now())))
 }
