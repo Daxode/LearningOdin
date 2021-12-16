@@ -13,31 +13,20 @@ main::proc()
     input_bytes, _ := os.read_entire_file("input.txt")
 
     // Loop through every byte
-    pos: [2]u32 = {0, 0}
-    aim: u32
-    start_letter: u8
-    set_value := true
+    frequency_counter: [12]i8 = 0
     for input_byte, i in input_bytes {
-        switch {
-            case input_byte == '\n':
-                num := u32(input_bytes[i-1]-'0')
-                switch start_letter {
-                    case 'f':
-                        pos[0] += num
-                        pos[1] += num * aim
-                    case 'd':
-                        aim += num
-                    case 'u':
-                        aim -= num
-                }
-                set_value = true
-            case set_value:
-                start_letter = input_byte
-                set_value = false
-        }
+        if i % 13 == 12 {continue}
+        frequency_counter[i % 13] += (i8(input_byte-'0')*2)-1
     }
 
-    answer := pos[0]*pos[1]
+    gamma: u16 = 0
+    epsilon: u16 = 0
+    for frequency_count, i in frequency_counter {
+        gamma |= u16(frequency_count>0) << u8(11-i)
+        epsilon |= u16(frequency_count<0) << u8(11-i)
+    }
+
+    answer := gamma * epsilon
 
     // Clean up
     delete(input_bytes)
