@@ -14,30 +14,27 @@ main::proc()
 
     // Loop through every byte
     pos: [2]u32 = {0, 0}
-    num: u32
-    for i := len(input_bytes)-1; i >= 0; i -= 1 {
-        switch input_bytes[i] {
-            case '0'..'9':
-                num = u32(input_bytes[i]-'0')
-            case '\n':
-                switch input_bytes[i+1] {
+    aim: u32
+    start_letter: u8
+    set_value := true
+    for input_byte, i in input_bytes {
+        switch {
+            case input_byte == '\n':
+                num := u32(input_bytes[i-1]-'0')
+                switch start_letter {
                     case 'f':
                         pos[0] += num
+                        pos[1] += num * aim
                     case 'd':
-                        pos[1] += num
+                        aim += num
                     case 'u':
-                        pos[1] -= num
+                        aim -= num
                 }
+                set_value = true
+            case set_value:
+                start_letter = input_byte
+                set_value = false
         }
-    }
-
-    switch input_bytes[0] {
-        case 'f':
-            pos[0] += num
-        case 'd':
-            pos[1] += num
-        case 'u':
-            pos[1] -= num
     }
 
     answer := pos[0]*pos[1]
