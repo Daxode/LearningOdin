@@ -1,7 +1,6 @@
 package advent_of_code_d15
 
 import "core:fmt"
-import "core:os"
 import win32 "core:sys/windows"
 import "core:time"
 
