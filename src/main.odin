@@ -22,25 +22,24 @@ main::proc()
     win32.ReadFile(input_handle, raw_data(input_bytes), u32(len(input_bytes)), &single_read_length, nil)
 
     // Loop through every byte
-    val_previous: u32 = 0
-    val_current: u32 = 0
+    val_fifo: [4]u32 = 0
     shift_amount: u32 = 1
     answer : u32 = 0
     for i := len(input_bytes)-1; i >= 0; i -= 1 {
         digit := u32(input_bytes[i] - '0')
         
+        // When new line means done parsing one num (218 is '\n'-'0' in u8 underflow)
         if (digit == 218) {
+            val_fifo = transmute([4]u32)(transmute(u128) val_fifo << 32)
+            val_fifo[0] = 0
             shift_amount = 1
-            answer += u32(val_current < val_previous)
-            val_current, val_previous = 0, val_current
             continue
         } 
 
-        val_current += digit * shift_amount
+        val_fifo[0] += digit * shift_amount
         shift_amount *= 10
     }
-    
-    answer += u32(val_current < val_previous)
+
     fmt.println(answer)
 
     delete(input_bytes)
