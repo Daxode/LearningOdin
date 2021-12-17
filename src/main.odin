@@ -26,7 +26,8 @@ main::proc()
         epsilon |= u16(frequency_count<0) << u8(11-i)
     }
 
-    answer := gamma * epsilon
+    
+    answer := u32(gamma) * u32(epsilon)
 
     // Clean up
     delete(input_bytes)
