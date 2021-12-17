@@ -19,14 +19,12 @@ main::proc()
         frequency_counter[i % 13] += (i8(input_byte-'0')*2)-1
     }
 
+    // Set bits based on array of frequency
     gamma: u16 = 0
-    epsilon: u16 = 0
     for frequency_count, i in frequency_counter {
         gamma |= u16(frequency_count>0) << u8(11-i)
-        epsilon |= u16(frequency_count<0) << u8(11-i)
     }
-
-    
+    epsilon := u32((~gamma<<4)>>4) // Negates and sets four last bits to zero
     answer := u32(gamma) * u32(epsilon)
 
     // Clean up
