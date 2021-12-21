@@ -168,8 +168,8 @@ main::proc()
 
     // Pick the physical device
     devicePicked: vk.PhysicalDevice
-    graphicsFamIndex : u32
-    presentFamIndex : u32
+    famIndexGraphics : u32
+    famIndexPresentation : u32
     {
         // Retrieve Physical Devices
         deviceCount : u32 = 0;
@@ -201,14 +201,14 @@ main::proc()
             for qFamily, i in qFamilies {
                 index := u32(i)
                 if vk.QueueFlag.GRAPHICS in qFamily.queueFlags {
-                    graphicsFamIndex = index
+                    famIndexGraphics = index
                     qFamiliesSupported |= {.GRAPHICS}
                 }
 
                 presentSupport : b32 = false
                 vk.GetPhysicalDeviceSurfaceSupportKHR(device, index, surfaceKHR, &presentSupport)
                 if (presentSupport) {
-                    presentFamIndex = index
+                    famIndexPresentation = index
                     qFamiliesSupported |= {.PRESENTATION}
                 }
             }
@@ -244,16 +244,21 @@ main::proc()
     // Create Logical Device
     logicalDevice : vk.Device
     {
-        SetU32 :: bit_set[0..<10;u32]
-        something : SetU32 = {1,2}
+        u32set :: bit_set[u32(0)..<u32(32);u32]
+        famIndexSet:  = u32set{famIndexGraphics, famIndexPresentation}
 
         // Setup Queue Device CreateInfo
         queuePriority : f32 = 1
-        deviceQCreateInfo := vk.DeviceQueueCreateInfo {
-            sType = vk.StructureType.DEVICE_QUEUE_CREATE_INFO,
-            queueFamilyIndex = graphicsFamIndex,
-            queueCount = 1,
-            pQueuePriorities = &queuePriority,
+        deviceQCreateInfos := make([dynamic]vk.DeviceQueueCreateInfo,0,4)
+        defer delete(deviceQCreateInfos)
+        for famIndex in u32(0)..<u32(32) {
+            if !(famIndex in famIndexSet) {continue}
+            append(&deviceQCreateInfos, vk.DeviceQueueCreateInfo {
+                sType = vk.StructureType.DEVICE_QUEUE_CREATE_INFO,
+                queueFamilyIndex = famIndex,
+                queueCount = 1,
+                pQueuePriorities = &queuePriority,
+            })
         }
 
         // Create Logical Device
@@ -261,8 +266,8 @@ main::proc()
         vk.GetPhysicalDeviceFeatures(devicePicked, &deviceFeature)
         deviceCreateInfo := vk.DeviceCreateInfo {
             sType = vk.StructureType.DEVICE_CREATE_INFO,
-            queueCreateInfoCount = 1,
-            pQueueCreateInfos = &deviceQCreateInfo,
+            queueCreateInfoCount = u32(len(deviceQCreateInfos)),
+            pQueueCreateInfos = raw_data(deviceQCreateInfos),
             pEnabledFeatures = &deviceFeature,
         }
 
@@ -284,7 +289,7 @@ main::proc()
     // Get Graphics Queue
     {
         graphicsQ : vk.Queue
-        vk.GetDeviceQueue(logicalDevice, graphicsFamIndex, 0, &graphicsQ)
+        vk.GetDeviceQueue(logicalDevice, famIndexGraphics, 0, &graphicsQ)
     }
 
     // Main loop
