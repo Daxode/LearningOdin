@@ -8,6 +8,7 @@ import "core:runtime"
 import "core:strings"
 import "vendor:stb/image"
 import "core:c"
+import "core:mem"
 
 load_vulkan_function_pointers::proc()
 {
@@ -156,9 +157,9 @@ main::proc()
     }
 
     // Get window surface
-    surfaceKHR : vk.SurfaceKHR
+    surface_khr : vk.SurfaceKHR
     {
-        resultCreateWindowSurface := glfw.CreateWindowSurface(vkInstance, windowHandle, nil, &surfaceKHR)
+        resultCreateWindowSurface := glfw.CreateWindowSurface(vkInstance, windowHandle, nil, &surface_khr)
         when ODIN_DEBUG { 
             if (resultCreateWindowSurface != vk.Result.SUCCESS) {
                 panic("Creating instance failed")
@@ -206,7 +207,7 @@ main::proc()
                 }
 
                 presentSupport : b32 = false
-                vk.GetPhysicalDeviceSurfaceSupportKHR(device, index, surfaceKHR, &presentSupport)
+                vk.GetPhysicalDeviceSurfaceSupportKHR(device, index, surface_khr, &presentSupport)
                 if (presentSupport) {
                     famIndexPresentation = index
                     qFamiliesSupported |= {.PRESENTATION}
@@ -225,6 +226,7 @@ main::proc()
             deviceCurrentScore *= u32(qFamiliesSupported == {.GRAPHICS, .PRESENTATION})
 
             when ODIN_DEBUG {    
+                // Check for device extension support
                 device_extension_count: u32
                 vk.EnumerateDeviceExtensionProperties(device, nil, &device_extension_count, nil)
                 device_extensions := make([]vk.ExtensionProperties, device_extension_count)
@@ -235,6 +237,32 @@ main::proc()
                     swapchain_present |= cstring(&device_extension.extensionName[0]) == cstring("VK_KHR_swapchain")
                 }
                 deviceCurrentScore *= u32(swapchain_present)
+
+                // Check Device Surface
+                surface_capabilities: vk.SurfaceCapabilitiesKHR
+                vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface_khr, &surface_capabilities)
+
+                format_count: u32
+                vk.GetPhysicalDeviceSurfaceFormatsKHR(device,surface_khr,&format_count,nil)
+                present_mode_count: u32
+                vk.GetPhysicalDeviceSurfacePresentModesKHR(device,surface_khr,&present_mode_count,nil)
+
+                present_mode_size := size_of(vk.PresentModeKHR)   * present_mode_count
+                format_size  := size_of(vk.SurfaceFormatKHR) * format_count
+                surface_present_and_format_buffer, _ := mem.alloc_bytes(int(present_mode_size + format_size))
+                present_mode_buffer := mem.slice_data_cast([]vk.PresentModeKHR,   surface_present_and_format_buffer[:present_mode_size])
+                format_buffer  := mem.slice_data_cast([]vk.SurfaceFormatKHR, surface_present_and_format_buffer[present_mode_size:])
+
+                vk.GetPhysicalDeviceSurfaceFormatsKHR(device,surface_khr,&format_count,raw_data(format_buffer))
+                vk.GetPhysicalDeviceSurfacePresentModesKHR(device,surface_khr,&present_mode_count,raw_data(present_mode_buffer))
+
+                for format in format_buffer {
+                    fmt.println(format)
+                }
+
+                for present_mode in present_mode_buffer {
+                    fmt.println(present_mode)
+                }
             }
 
             // Resolve Score
@@ -259,7 +287,7 @@ main::proc()
     logicalDevice : vk.Device
     {
         u32set :: bit_set[u32(0)..<u32(32);u32]
-        famIndexSet:  = u32set{famIndexGraphics, famIndexPresentation}
+        famIndexSet := u32set{famIndexGraphics, famIndexPresentation}
 
         // Setup Queue Device CreateInfo
         queuePriority : f32 = 1
@@ -322,7 +350,7 @@ main::proc()
     }
 
     vk.DestroyDevice(logicalDevice, nil)
-    vk.DestroySurfaceKHR(vkInstance, surfaceKHR, nil)
+    vk.DestroySurfaceKHR(vkInstance, surface_khr, nil)
     vk.DestroyInstance(vkInstance, nil)
     glfw.DestroyWindow(windowHandle);
     glfw.Terminate();
