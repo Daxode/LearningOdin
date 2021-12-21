@@ -220,8 +220,22 @@ main::proc()
 
             deviceCurrentScore += deviceProp.limits.maxImageDimension2D;
 
+            // Disable score
             deviceCurrentScore *= u32(deviceFeature.geometryShader)
             deviceCurrentScore *= u32(qFamiliesSupported == {.GRAPHICS, .PRESENTATION})
+
+            when ODIN_DEBUG {    
+                device_extension_count: u32
+                vk.EnumerateDeviceExtensionProperties(device, nil, &device_extension_count, nil)
+                device_extensions := make([]vk.ExtensionProperties, device_extension_count)
+                vk.EnumerateDeviceExtensionProperties(device, nil, &device_extension_count, raw_data(device_extensions))
+                
+                swapchain_present := false
+                for device_extension in &device_extensions {
+                    swapchain_present |= cstring(&device_extension.extensionName[0]) == cstring("VK_KHR_swapchain")
+                }
+                deviceCurrentScore *= u32(swapchain_present)
+            }
 
             // Resolve Score
             if deviceCurrentScore > deviceBestScore {
@@ -264,16 +278,19 @@ main::proc()
         // Create Logical Device
         deviceFeature : vk.PhysicalDeviceFeatures
         vk.GetPhysicalDeviceFeatures(devicePicked, &deviceFeature)
+        swapchain_extension_name: cstring = "VK_KHR_swapchain"
         deviceCreateInfo := vk.DeviceCreateInfo {
             sType = vk.StructureType.DEVICE_CREATE_INFO,
             queueCreateInfoCount = u32(len(deviceQCreateInfos)),
             pQueueCreateInfos = raw_data(deviceQCreateInfos),
             pEnabledFeatures = &deviceFeature,
+            enabledExtensionCount = 1,
+            ppEnabledExtensionNames = &swapchain_extension_name,
         }
 
         when ODIN_DEBUG {
             deviceCreateInfo.enabledLayerCount = 1
-            layerKHRVal : cstring = "VK_LAYER_KHRONOS_validation"
+            layerKHRVal: cstring = "VK_LAYER_KHRONOS_validation"
             deviceCreateInfo.ppEnabledLayerNames = &layerKHRVal
         }
 
