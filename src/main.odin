@@ -426,8 +426,10 @@ main::proc()
     }
 
     // Set up Graphics Pipeline
+    pipeline_layout: vk.PipelineLayout
     {
         triangle_vert_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_vert.spv", logical_device)
+        defer vk.DestroyShaderModule(logical_device, triangle_vert_shader_module, nil)
         triangle_vert_shader_stage := vk.PipelineShaderStageCreateInfo {
             sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
             stage = {.VERTEX},
@@ -436,6 +438,7 @@ main::proc()
         }
 
         triangle_frag_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_frag.spv", logical_device)
+        defer vk.DestroyShaderModule(logical_device, triangle_frag_shader_module, nil)
         triangle_frag_shader_stage := vk.PipelineShaderStageCreateInfo {
             sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
             stage = {.FRAGMENT},
@@ -443,9 +446,71 @@ main::proc()
             pName = "main",
         }
 
-        defer vk.DestroyShaderModule(logical_device, triangle_vert_shader_module, nil)
-        defer vk.DestroyShaderModule(logical_device, triangle_frag_shader_module, nil)
-        
+        // How vertex data should be handled
+        vertex_input_createinfo := vk.PipelineVertexInputStateCreateInfo {sType = vk.StructureType.PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO}
+        assembly_input_createinfo := vk.PipelineInputAssemblyStateCreateInfo {
+            sType = vk.StructureType.PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            topology = .TRIANGLE_LIST,
+        }
+
+        // Where to draw
+        app_viewport := vk.Viewport{
+            width = f32(surface_extent.width),
+            height = f32(surface_extent.height),
+            maxDepth = 1,
+        }
+        app_scissor := vk.Rect2D{extent = surface_extent}
+
+        viewport_state_createinfo := vk.PipelineViewportStateCreateInfo{
+            sType = vk.StructureType.PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            pScissors = &app_scissor,
+            scissorCount = 1,
+            pViewports = &app_viewport,
+            viewportCount = 1,
+        }
+
+        // Create rasterizer
+        rasterizer_createinfo := vk.PipelineRasterizationStateCreateInfo {
+            sType = vk.StructureType.PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            cullMode = {.BACK},
+            frontFace = vk.FrontFace.CLOCKWISE,
+        }
+
+        multisampling_createinfo := vk.PipelineMultisampleStateCreateInfo {
+            sType = vk.StructureType.PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            minSampleShading = 1,
+            rasterizationSamples = {._1},
+        }
+
+        blend_alpha := vk.PipelineColorBlendAttachmentState {
+            colorWriteMask = {.R, .G, .B, .A},
+            blendEnable = true,
+            srcColorBlendFactor = .SRC_ALPHA,
+            dstColorBlendFactor = .ONE_MINUS_SRC_ALPHA,
+        }
+
+        blend_createinfo := vk.PipelineColorBlendStateCreateInfo {
+            sType = vk.StructureType.PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            attachmentCount = 1,
+            pAttachments = &blend_alpha,
+        }
+
+        // Set up dynamic states, that should be updated before drawing
+        dynamic_states := [?]vk.DynamicState{.VIEWPORT, .LINE_WIDTH}
+        dynamic_state_createinfo := vk.PipelineDynamicStateCreateInfo {
+            sType = vk.StructureType.PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            dynamicStateCount = 2,
+            pDynamicStates = &dynamic_states[0],
+        }
+
+        // Pipeline layout
+        pipeline_layout_createinfo := vk.PipelineLayoutCreateInfo {sType = vk.StructureType.PIPELINE_LAYOUT_CREATE_INFO}
+        result_pipeline_layout := vk.CreatePipelineLayout(device, &pipeline_layout_createinfo, nil, &pipeline_layout)
+        when ODIN_DEBUG { 
+            if (result_pipeline_layout != vk.Result.SUCCESS) {
+                panic("Creating pipeline layout failed")
+            }
+        }
     }
 
     // Main loop
@@ -460,6 +525,7 @@ main::proc()
         }
     }
 
+    vk.DestroyPipelineLayout(logical_device, pipeline_layout, nil)
     for image_view in swapchain_image_views {
         vk.DestroyImageView(logical_device, image_view, nil)
     }
