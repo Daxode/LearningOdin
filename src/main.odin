@@ -429,7 +429,8 @@ main::proc()
     {
         triangle_vert_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_vert.spv", logical_device)
         triangle_frag_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_frag.spv", logical_device)
-
+        defer vk.DestroyShaderModule(logical_device, triangle_vert_shader_module, nil)
+        defer vk.DestroyShaderModule(logical_device, triangle_frag_shader_module, nil)
         
     }
 
