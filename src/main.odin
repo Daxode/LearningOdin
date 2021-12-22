@@ -755,6 +755,7 @@ main::proc()
 
         vk.QueuePresentKHR(queue_presentation, &present_info)
         vk.QueueWaitIdle(queue_presentation)
+        vk.QueueWaitIdle(queue_graphics)
     }
 
     when ODIN_DEBUG {
