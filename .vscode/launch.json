@@ -7,7 +7,7 @@
       "request": "launch",
       "program": "${workspaceFolder}/out/debug.exe",
       "preLaunchTask": "Build Debug",
-      "cwd": "${workspaceFolder}", 
+      "cwd": "${workspaceFolder}/out", 
     }
   ]
 }

@@ -5,8 +5,8 @@
     "tasks": [
         {
             "label": "Build Debug",
-            "type": "shell",
-            "command": "odin.exe build ./src -subsystem:console -out:out/debug.exe -opt:0 -debug",
+            "type": "process",
+            "command": "build_debug.bat",
             "problemMatcher": [],
             "group": {
                 "kind": "build",
@@ -15,8 +15,8 @@
         },
         {
             "label": "Build Release",
-            "type": "shell",
-            "command": "odin.exe build ./src -subsystem:window -out:out/release.exe -opt:3 -no-bounds-check -resource:resources.rc",
+            "type": "process",
+            "command": "build_release.bat",
         }
     ]
 }
