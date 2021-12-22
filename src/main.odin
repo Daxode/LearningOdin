@@ -338,12 +338,14 @@ main::proc()
         }
     }
 
+    // Create swapchain
     swapchain_khr: vk.SwapchainKHR
+    surface_extent: vk.Extent2D
     {
         surface_capabilities: vk.SurfaceCapabilitiesKHR
         vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(device_picked, surface_khr, &surface_capabilities)
         
-        surface_extent := surface_capabilities.currentExtent
+        surface_extent = surface_capabilities.currentExtent
         if (surface_extent.width == c.UINT32_MAX) {
             window_frame_width, window_frame_height := glfw.GetFramebufferSize(window_handle)
             surface_extent = {
@@ -374,13 +376,56 @@ main::proc()
             swapchain_khr_createinfo.pQueueFamilyIndices = &(q_family_indicies)[0]
         }
 
-        // Create instance
+        // Create swapchain_khr
         result_swapchain_khr := vk.CreateSwapchainKHR(logical_device, &swapchain_khr_createinfo, nil, &swapchain_khr)
         when ODIN_DEBUG { 
             if (result_swapchain_khr != vk.Result.SUCCESS) {
                 panic("Creating swapchain failed")
             }
         }
+    }
+
+    swapchain_images: []vk.Image
+    swapchain_image_views : []vk.ImageView
+    defer delete(swapchain_images)
+    defer delete(swapchain_image_views)
+    {
+        // Get image count
+        image_count: u32
+        vk.GetSwapchainImagesKHR(logical_device, swapchain_khr, &image_count,nil)
+
+        // Allocate memmory to save images and views
+        swapchain_images_size := size_of(vk.Image)*image_count
+        swapchain_images_and_views_buffer, _ := mem.alloc_bytes(int(swapchain_images_size + size_of(vk.ImageView)*image_count))
+        swapchain_images        = mem.slice_data_cast([]vk.Image,       swapchain_images_and_views_buffer[:swapchain_images_size])
+        swapchain_image_views   = mem.slice_data_cast([]vk.ImageView,   swapchain_images_and_views_buffer[swapchain_images_size:])
+        
+        // Get images
+        vk.GetSwapchainImagesKHR(logical_device, swapchain_khr, &image_count, raw_data(swapchain_images))
+
+        // Create views and fill swapchain_image_views
+        for swapchain_image, i in swapchain_images {
+            view_create_info := vk.ImageViewCreateInfo {
+                sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
+                image = swapchain_image,
+                viewType = vk.ImageViewType.D2,
+                format = surface_format.format,
+                components = {.IDENTITY,.IDENTITY,.IDENTITY,.IDENTITY},
+                subresourceRange = {{.COLOR}, 0,1,0,1},
+            }
+
+            // Create swapchain_khr
+            result_swapchain_image_view := vk.CreateImageView(logical_device, &view_create_info, nil, &swapchain_image_views[i])
+            when ODIN_DEBUG { 
+                if (result_swapchain_image_view != vk.Result.SUCCESS) {
+                    panic("Creating image view failed")
+                }
+            }
+        }
+    }
+
+    for swapchain_image_view in swapchain_image_views {
+        fmt.println(swapchain_image_view)
     }
 
     // Get Graphics Queue
@@ -401,6 +446,9 @@ main::proc()
         }
     }
 
+    for image_view in swapchain_image_views {
+        vk.DestroyImageView(logical_device, image_view, nil)
+    }
     vk.DestroySwapchainKHR(logical_device, swapchain_khr, nil)
     vk.DestroyDevice(logical_device, nil)
     vk.DestroySurfaceKHR(app_instance, surface_khr, nil)
