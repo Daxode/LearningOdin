@@ -505,7 +505,7 @@ main::proc()
 
         // Pipeline layout
         pipeline_layout_createinfo := vk.PipelineLayoutCreateInfo {sType = vk.StructureType.PIPELINE_LAYOUT_CREATE_INFO}
-        result_pipeline_layout := vk.CreatePipelineLayout(device, &pipeline_layout_createinfo, nil, &pipeline_layout)
+        result_pipeline_layout := vk.CreatePipelineLayout(logical_device, &pipeline_layout_createinfo, nil, &pipeline_layout)
         when ODIN_DEBUG { 
             if (result_pipeline_layout != vk.Result.SUCCESS) {
                 panic("Creating pipeline layout failed")
