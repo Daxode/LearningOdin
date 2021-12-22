@@ -458,12 +458,21 @@ main::proc()
             pColorAttachments = &attachment_reference,
         }
 
+        subpass_dependency := vk.SubpassDependency{
+            srcSubpass = vk.SUBPASS_EXTERNAL,
+            srcStageMask = {.COLOR_ATTACHMENT_OUTPUT},
+            dstStageMask = {.COLOR_ATTACHMENT_OUTPUT},
+            dstAccessMask = {.COLOR_ATTACHMENT_WRITE},
+        }
+
         renderpass_createinfo := vk.RenderPassCreateInfo {
             sType = vk.StructureType.RENDER_PASS_CREATE_INFO,
             attachmentCount = 1,
             pAttachments = &attachment_description,
             subpassCount = 1,
             pSubpasses = &subpass_description,
+            dependencyCount = 1,
+            pDependencies = &subpass_dependency,
         }
 
         // Create swapchain_image_views
@@ -576,7 +585,7 @@ main::proc()
             pRasterizationState = &rasterizer_createinfo,
             pMultisampleState = &multisampling_createinfo,
             pColorBlendState = &blend_createinfo,
-            pDynamicState = &dynamic_state_createinfo,
+            //pDynamicState = &dynamic_state_createinfo,
             layout = pipeline_layout,
             renderPass = renderpass,
         }
@@ -685,9 +694,67 @@ main::proc()
         }
     }
 
+    // Create semaphores
+    semaphore_image_available: vk.Semaphore
+    defer vk.DestroySemaphore(logical_device,semaphore_image_available,nil)
+    semaphore_render_finished: vk.Semaphore
+    defer vk.DestroySemaphore(logical_device,semaphore_render_finished,nil)
+    {
+        semaphore_createinfo := vk.SemaphoreCreateInfo{sType= vk.StructureType.SEMAPHORE_CREATE_INFO}
+        result_semaphore_image_available := vk.CreateSemaphore(logical_device, &semaphore_createinfo, nil, &semaphore_image_available)
+        result_semaphore_render_finished := vk.CreateSemaphore(logical_device, &semaphore_createinfo, nil, &semaphore_render_finished)
+        when ODIN_DEBUG {
+            if (result_semaphore_image_available != vk.Result.SUCCESS || result_semaphore_render_finished != vk.Result.SUCCESS) {
+                panic("Creating semaphores failed")
+            }
+        }
+    }
+
+    queue_graphics: vk.Queue
+    queue_presentation: vk.Queue
+    // Get Queues
+    {
+        vk.GetDeviceQueue(logical_device, famIndexGraphics, 0, &queue_graphics)
+        vk.GetDeviceQueue(logical_device, famIndexPresentation, 0, &queue_presentation)
+    }
+
     // Main loop
     for !glfw.WindowShouldClose(window_handle) {
         glfw.PollEvents();
+
+        // Draw frame
+        image_index: u32
+        vk.AcquireNextImageKHR(logical_device, swapchain_khr, c.UINT64_MAX, semaphore_image_available, 0, &image_index)
+        wait_mask := vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT}
+        submit_info := vk.SubmitInfo {
+            sType = vk.StructureType.SUBMIT_INFO,
+            waitSemaphoreCount = 1,
+            pWaitSemaphores = &semaphore_image_available,
+            pWaitDstStageMask = &wait_mask,
+            commandBufferCount = 1,
+            pCommandBuffers = &command_buffers[image_index],
+            signalSemaphoreCount = 1,
+            pSignalSemaphores = &semaphore_render_finished,
+        }
+
+        result_queue_submit := vk.QueueSubmit(queue_graphics, 1, &submit_info, 0)
+        when ODIN_DEBUG {
+            if result_queue_submit != vk.Result.SUCCESS {
+                panic("Submitting queue failed")
+            }
+        }
+
+        present_info := vk.PresentInfoKHR {
+            sType = vk.StructureType.PRESENT_INFO_KHR,
+            waitSemaphoreCount = 1,
+            pWaitSemaphores = &semaphore_render_finished,
+            swapchainCount = 1,
+            pSwapchains = &swapchain_khr,
+            pImageIndices = &image_index,
+        }
+
+        vk.QueuePresentKHR(queue_presentation, &present_info)
+        vk.QueueWaitIdle(queue_presentation)
     }
 
     when ODIN_DEBUG {
