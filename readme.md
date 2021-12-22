@@ -7,5 +7,6 @@ as it's also meant as a scaling execersise in how to right maintable DoD code.
 1. Install Odin [odin-lang.org]
 2. Create `/out` folder
 3. Create `/out/compiled_shaders` folder
-4. Run either `build_debug.bat` or `build_release.bat` to build
-5. Run `debug.exe` or `release.exe` inside `/out`
+4. Copy `/resources` into `/out/resources`
+5. Run either `build_debug.bat` or `build_release.bat` to build
+6. Run `debug.exe` or `release.exe` inside `/out`
