@@ -424,16 +424,6 @@ main::proc()
         }
     }
 
-    for swapchain_image_view in swapchain_image_views {
-        fmt.println(swapchain_image_view)
-    }
-
-    // Get Graphics Queue
-    {
-        graphicsQ : vk.Queue
-        vk.GetDeviceQueue(logical_device, famIndexGraphics, 0, &graphicsQ)
-    }
-
     // Main loop
     for !glfw.WindowShouldClose(window_handle) {
         glfw.PollEvents();
