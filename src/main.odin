@@ -415,12 +415,49 @@ main::proc()
                 subresourceRange = {{.COLOR}, 0,1,0,1},
             }
 
-            // Create swapchain_khr
+            // Create swapchain_image_views
             result_swapchain_image_view := vk.CreateImageView(logical_device, &view_create_info, nil, &swapchain_image_views[i])
             when ODIN_DEBUG { 
                 if (result_swapchain_image_view != vk.Result.SUCCESS) {
                     panic("Creating image view failed")
                 }
+            }
+        }
+    }
+
+    // Setup RenderPass
+    renderpass: vk.RenderPass
+    {
+        attachment_description := vk.AttachmentDescription {
+            format = surface_format.format,
+            samples = {._1},
+            loadOp = .CLEAR,
+            storeOp = .STORE,
+            stencilLoadOp = .DONT_CARE,
+            stencilStoreOp = .DONT_CARE,
+            finalLayout = .PRESENT_SRC_KHR,
+        }
+
+        attachment_reference := vk.AttachmentReference {layout = .COLOR_ATTACHMENT_OPTIMAL}
+        subpass_description := vk.SubpassDescription {
+            pipelineBindPoint = .GRAPHICS,
+            colorAttachmentCount = 1,
+            pColorAttachments = &attachment_reference,
+        }
+
+        renderpass_createinfo := vk.RenderPassCreateInfo {
+            sType = vk.StructureType.RENDER_PASS_CREATE_INFO,
+            attachmentCount = 1,
+            pAttachments = &attachment_description,
+            subpassCount = 1,
+            pSubpasses = &subpass_description,
+        }
+
+        // Create swapchain_image_views
+        result_renderpass := vk.CreateRenderPass(logical_device, &renderpass_createinfo, nil, &renderpass)
+        when ODIN_DEBUG { 
+            if (result_renderpass != vk.Result.SUCCESS) {
+                panic("Creating renderpass failed")
             }
         }
     }
@@ -488,7 +525,6 @@ main::proc()
             srcColorBlendFactor = .SRC_ALPHA,
             dstColorBlendFactor = .ONE_MINUS_SRC_ALPHA,
         }
-
         blend_createinfo := vk.PipelineColorBlendStateCreateInfo {
             sType = vk.StructureType.PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
             attachmentCount = 1,
@@ -526,6 +562,7 @@ main::proc()
     }
 
     vk.DestroyPipelineLayout(logical_device, pipeline_layout, nil)
+    vk.DestroyRenderPass(logical_device, renderpass,nil)
     for image_view in swapchain_image_views {
         vk.DestroyImageView(logical_device, image_view, nil)
     }
