@@ -86,16 +86,16 @@ main::proc()
     }
 
     // Create Instance and External Debug Messenger
-    vkInstance: vk.Instance
+    app_instance: vk.Instance
     when ODIN_DEBUG {debugMessengerEXT: vk.DebugUtilsMessengerEXT}
     {
-        createInfo : vk.InstanceCreateInfo;
-        createInfo.sType = vk.StructureType.INSTANCE_CREATE_INFO;
-        createInfo.pApplicationInfo = &appInfo;
+        instance_createinfo : vk.InstanceCreateInfo;
+        instance_createinfo.sType = vk.StructureType.INSTANCE_CREATE_INFO;
+        instance_createinfo.pApplicationInfo = &appInfo;
         when ODIN_DEBUG {
-            createInfo.enabledLayerCount = 1
+            instance_createinfo.enabledLayerCount = 1
             layerKHRVal : cstring = "VK_LAYER_KHRONOS_validation"
-            createInfo.ppEnabledLayerNames = &layerKHRVal
+            instance_createinfo.ppEnabledLayerNames = &layerKHRVal
         }
 
         requiredInstanceExtensions := glfw.GetRequiredInstanceExtensions();
@@ -104,11 +104,11 @@ main::proc()
             defer delete(enabledExtensions)
             copy(enabledExtensions[:], requiredInstanceExtensions[:])
             enabledExtensions[len(enabledExtensions)-1] = "VK_EXT_debug_utils"
-            createInfo.ppEnabledExtensionNames = raw_data(enabledExtensions);
-            createInfo.enabledExtensionCount = u32(len(enabledExtensions));
+            instance_createinfo.ppEnabledExtensionNames = raw_data(enabledExtensions);
+            instance_createinfo.enabledExtensionCount = u32(len(enabledExtensions));
         } else {
-            createInfo.ppEnabledExtensionNames = raw_data(requiredInstanceExtensions);
-            createInfo.enabledExtensionCount = u32(len(requiredInstanceExtensions));
+            instance_createinfo.ppEnabledExtensionNames = raw_data(requiredInstanceExtensions);
+            instance_createinfo.enabledExtensionCount = u32(len(requiredInstanceExtensions));
         }
 
         // Create Debugger
@@ -135,11 +135,11 @@ main::proc()
                     }),
             }
 
-            createInfo.pNext = cast(rawptr) &debugCreateInfo
+            instance_createinfo.pNext = cast(rawptr) &debugCreateInfo
         }
 
         // Create instance
-        resultCreateInstance := vk.CreateInstance(&createInfo, nil, &vkInstance)
+        resultCreateInstance := vk.CreateInstance(&instance_createinfo, nil, &app_instance)
         when ODIN_DEBUG { 
             if (resultCreateInstance != vk.Result.SUCCESS) {
                 panic("Creating Vulkan instance failed");
@@ -147,9 +147,9 @@ main::proc()
         }
 
         when ODIN_DEBUG {
-            CreateDebugUtilsMessengerEXT := vk.ProcCreateDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(vkInstance, "vkCreateDebugUtilsMessengerEXT"));
+            CreateDebugUtilsMessengerEXT := vk.ProcCreateDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(app_instance, "vkCreateDebugUtilsMessengerEXT"));
             if (CreateDebugUtilsMessengerEXT != nil) {
-                CreateDebugUtilsMessengerEXT(vkInstance, &debugCreateInfo, nil, &debugMessengerEXT)
+                CreateDebugUtilsMessengerEXT(app_instance, &debugCreateInfo, nil, &debugMessengerEXT)
             } else {
                 panic("vk.Result.ERROR_EXTENSION_NOT_PRESENT");
             }
@@ -159,7 +159,7 @@ main::proc()
     // Get window surface
     surface_khr : vk.SurfaceKHR
     {
-        resultCreateWindowSurface := glfw.CreateWindowSurface(vkInstance, window_handle, nil, &surface_khr)
+        resultCreateWindowSurface := glfw.CreateWindowSurface(app_instance, window_handle, nil, &surface_khr)
         when ODIN_DEBUG { 
             if (resultCreateWindowSurface != vk.Result.SUCCESS) {
                 panic("Creating instance failed")
@@ -176,10 +176,10 @@ main::proc()
     {
         // Retrieve Physical Devices
         deviceCount : u32 = 0;
-        vk.EnumeratePhysicalDevices(vkInstance, &deviceCount, nil)
+        vk.EnumeratePhysicalDevices(app_instance, &deviceCount, nil)
         devices := make([]vk.PhysicalDevice, deviceCount)
         defer delete(devices)
-        vk.EnumeratePhysicalDevices(vkInstance, &deviceCount, &devices[0])
+        vk.EnumeratePhysicalDevices(app_instance, &deviceCount, &devices[0])
         
         // Get most suited device
         deviceBestScore : u32 = 0
@@ -291,7 +291,7 @@ main::proc()
     }
     
     // Create Logical Device
-    logicalDevice : vk.Device
+    logical_device : vk.Device
     {
         u32set :: bit_set[u32(0)..<u32(32);u32]
         famIndexSet := u32set{famIndexGraphics, famIndexPresentation}
@@ -329,11 +329,11 @@ main::proc()
             deviceCreateInfo.ppEnabledLayerNames = &layerKHRVal
         }
 
-        // Create instance
-        resultCreateDevice := vk.CreateDevice(device_picked, &deviceCreateInfo, nil, &logicalDevice)
+        // Create device
+        resultCreateDevice := vk.CreateDevice(device_picked, &deviceCreateInfo, nil, &logical_device)
         when ODIN_DEBUG { 
             if (resultCreateDevice != vk.Result.SUCCESS) {
-                panic("Creating instance failed")
+                panic("Creating device failed")
             }
         }
     }
@@ -351,12 +351,42 @@ main::proc()
                 clamp(u32(window_frame_height), surface_capabilities.minImageExtent.height,  surface_capabilities.maxImageExtent.height),
             }
         }
+
+        swapchain_khr_createinfo := vk.SwapchainCreateInfoKHR {
+            sType = vk.StructureType.SWAPCHAIN_CREATE_INFO_KHR,
+            surface = surface_khr,
+            minImageCount = min(surface_capabilities.minImageCount+1, surface_capabilities.maxImageCount),
+            imageFormat = surface_format.format,
+            imageColorSpace = surface_format.colorSpace,
+            imageExtent = surface_extent,
+            imageArrayLayers = 1,
+            imageUsage = {.COLOR_ATTACHMENT},
+            preTransform = surface_capabilities.currentTransform,
+            compositeAlpha = {.OPAQUE},
+            presentMode = surface_present_mode,
+            clipped = true, // clips from windows in front
+        }
+
+        if famIndexGraphics != famIndexPresentation {
+            swapchain_khr_createinfo.imageSharingMode = vk.SharingMode.CONCURRENT
+            q_family_indicies := [?]u32{famIndexGraphics, famIndexPresentation}
+            swapchain_khr_createinfo.queueFamilyIndexCount = len(q_family_indicies)
+            swapchain_khr_createinfo.pQueueFamilyIndices = &(q_family_indicies)[0]
+        }
+
+        // Create instance
+        result_swapchain_khr := vk.CreateSwapchainKHR(logical_device, &swapchain_khr_createinfo, nil, &swapchain_khr)
+        when ODIN_DEBUG { 
+            if (result_swapchain_khr != vk.Result.SUCCESS) {
+                panic("Creating swapchain failed")
+            }
+        }
     }
 
     // Get Graphics Queue
     {
         graphicsQ : vk.Queue
-        vk.GetDeviceQueue(logicalDevice, famIndexGraphics, 0, &graphicsQ)
+        vk.GetDeviceQueue(logical_device, famIndexGraphics, 0, &graphicsQ)
     }
 
     // Main loop
@@ -365,15 +395,16 @@ main::proc()
     }
 
     when ODIN_DEBUG {
-        DestroyDebugUtilsMessengerEXT := vk.ProcDestroyDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(vkInstance, "vkDestroyDebugUtilsMessengerEXT"));
+        DestroyDebugUtilsMessengerEXT := vk.ProcDestroyDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(app_instance, "vkDestroyDebugUtilsMessengerEXT"));
         if (DestroyDebugUtilsMessengerEXT != nil) {
-            DestroyDebugUtilsMessengerEXT(vkInstance, debugMessengerEXT, nil);
+            DestroyDebugUtilsMessengerEXT(app_instance, debugMessengerEXT, nil);
         }
     }
 
-    vk.DestroyDevice(logicalDevice, nil)
-    vk.DestroySurfaceKHR(vkInstance, surface_khr, nil)
-    vk.DestroyInstance(vkInstance, nil)
+    vk.DestroySwapchainKHR(logical_device, swapchain_khr, nil)
+    vk.DestroyDevice(logical_device, nil)
+    vk.DestroySurfaceKHR(app_instance, surface_khr, nil)
+    vk.DestroyInstance(app_instance, nil)
     glfw.DestroyWindow(window_handle);
     glfw.Terminate();
 }
