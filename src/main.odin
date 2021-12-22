@@ -9,6 +9,7 @@ import "core:strings"
 import "vendor:stb/image"
 import "core:c"
 import "core:mem"
+import "core:os"
 
 load_vulkan_function_pointers::proc()
 {
@@ -424,6 +425,14 @@ main::proc()
         }
     }
 
+    // Set up Graphics Pipeline
+    {
+        triangle_vert_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_vert.spv", logical_device)
+        triangle_frag_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_frag.spv", logical_device)
+
+        
+    }
+
     // Main loop
     for !glfw.WindowShouldClose(window_handle) {
         glfw.PollEvents();
@@ -445,4 +454,25 @@ main::proc()
     vk.DestroyInstance(app_instance, nil)
     glfw.DestroyWindow(window_handle);
     glfw.Terminate();
+}
+
+CreateShaderModuleFromDevice :: proc(path: string, device: vk.Device) -> (shader_module: vk.ShaderModule, success: bool) {
+    shader_bytes, read_ok := os.read_entire_file(path)
+    success = read_ok
+
+    createinfo := vk.ShaderModuleCreateInfo {
+        sType = vk.StructureType.SHADER_MODULE_CREATE_INFO,
+        codeSize = len(shader_bytes),
+        pCode = (^u32)(raw_data(shader_bytes)),
+    }
+
+    result_shader_module := vk.CreateShaderModule(device, &createinfo, nil, &shader_module)
+    when ODIN_DEBUG { 
+        if (result_shader_module != vk.Result.SUCCESS) {
+            panic("Creating shader module failed")
+        }
+    }
+
+    delete(shader_bytes)
+    return
 }
