@@ -618,6 +618,73 @@ main::proc()
         }
     }
 
+    // Create command buffer
+    command_pool: vk.CommandPool
+    defer vk.DestroyCommandPool(logical_device, command_pool, nil)
+    command_buffers := make([]vk.CommandBuffer, len(framebuffers))
+    defer delete(command_buffers)
+    {
+        command_pool_createinfo := vk.CommandPoolCreateInfo {
+            sType = vk.StructureType.COMMAND_POOL_CREATE_INFO,
+            queueFamilyIndex = famIndexGraphics,
+        }
+
+        result_command_pool := vk.CreateCommandPool(logical_device, &command_pool_createinfo, nil, &command_pool)
+        when ODIN_DEBUG {
+            if (result_command_pool != vk.Result.SUCCESS) {
+                panic("Creating command pool failed")
+            }
+        }
+
+        command_buffers_info := vk.CommandBufferAllocateInfo {
+            sType = vk.StructureType.COMMAND_BUFFER_ALLOCATE_INFO,
+            commandPool = command_pool,
+            level = .PRIMARY,
+            commandBufferCount = u32(len(command_buffers)),
+        }
+
+        result_command_buffer := vk.AllocateCommandBuffers(logical_device, &command_buffers_info, raw_data(command_buffers))
+        when ODIN_DEBUG {
+            if result_command_buffer != vk.Result.SUCCESS {
+                panic("Creating command buffers failed")
+            }
+        }
+
+        for command_buffer, i in command_buffers {
+            command_buffer_begininfo := vk.CommandBufferBeginInfo {
+                sType = vk.StructureType.COMMAND_BUFFER_BEGIN_INFO,
+            }
+            result_command_buffer_begin := vk.BeginCommandBuffer(command_buffer, &command_buffer_begininfo)
+            when ODIN_DEBUG {
+                if result_command_buffer_begin != vk.Result.SUCCESS {
+                    panic("Beginning command buffer failed")
+                }
+            }
+
+            clear_color := vk.ClearValue {color={float32={0., 0., 0., 1.}}}
+            renderpass_begin_info := vk.RenderPassBeginInfo {
+                sType = vk.StructureType.RENDER_PASS_BEGIN_INFO,
+                renderPass = renderpass,
+                framebuffer = framebuffers[i],
+                renderArea = {{0,0}, surface_extent},
+                clearValueCount = 1,
+                pClearValues = &clear_color,
+            }
+
+            vk.CmdBeginRenderPass(command_buffer, &renderpass_begin_info, .INLINE)
+            vk.CmdBindPipeline(command_buffer, .GRAPHICS, pipeline)
+            vk.CmdDraw(command_buffer,3,1,0,0)
+            vk.CmdEndRenderPass(command_buffer)
+
+            result_command_buffer_end := vk.EndCommandBuffer(command_buffer)
+            when ODIN_DEBUG {
+                if result_command_buffer_end != vk.Result.SUCCESS {
+                    panic("Ending recording of command buffer failed")
+                }
+            }
+        }
+    }
+
     // Main loop
     for !glfw.WindowShouldClose(window_handle) {
         glfw.PollEvents();
