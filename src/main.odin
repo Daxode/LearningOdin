@@ -39,17 +39,17 @@ main::proc()
     }
 
     // Create GLFW Window
-    windowHandle: glfw.WindowHandle
+    window_handle: glfw.WindowHandle
     {
         glfw.Init();
         glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
         glfw.WindowHint(glfw.RESIZABLE, 0);
-        windowHandle = glfw.CreateWindow(1600, 900, "Vulkan Fun", nil, nil);
+        window_handle = glfw.CreateWindow(1600, 900, "Vulkan Fun", nil, nil);
         
         // w, h, channels: c.int
         // icon_bytes := image.load("resources/DaxodeProfile.png",&w,&h, &channels, 0)
         // icon := glfw.Image{w,h,icon_bytes}
-        // glfw.SetWindowIcon(windowHandle, []glfw.Image{icon})
+        // glfw.SetWindowIcon(window_handle, []glfw.Image{icon})
         // image.image_free(icon_bytes)
     }
 
@@ -159,7 +159,7 @@ main::proc()
     // Get window surface
     surface_khr : vk.SurfaceKHR
     {
-        resultCreateWindowSurface := glfw.CreateWindowSurface(vkInstance, windowHandle, nil, &surface_khr)
+        resultCreateWindowSurface := glfw.CreateWindowSurface(vkInstance, window_handle, nil, &surface_khr)
         when ODIN_DEBUG { 
             if (resultCreateWindowSurface != vk.Result.SUCCESS) {
                 panic("Creating instance failed")
@@ -168,7 +168,7 @@ main::proc()
     }
 
     // Pick the physical device
-    devicePicked: vk.PhysicalDevice
+    device_picked: vk.PhysicalDevice
     famIndexGraphics: u32
     famIndexPresentation: u32
     surface_present_mode: vk.PresentModeKHR
@@ -264,9 +264,9 @@ main::proc()
             }
 
             surface_present_mode = vk.PresentModeKHR.FIFO
-            for present_mode in surface_present_mode {
+            for present_mode in surface_present_modes {
                 if present_mode == vk.PresentModeKHR.FIFO_RELAXED {
-                    surface_format = format
+                    surface_present_mode = present_mode
                 }
             }
             
@@ -274,7 +274,7 @@ main::proc()
 
             // Resolve Score
             if deviceCurrentScore > deviceBestScore {
-                devicePicked = device
+                device_picked = device
                 deviceBestScore = deviceCurrentScore
             }
 
@@ -285,7 +285,7 @@ main::proc()
 
         when ODIN_DEBUG {
             deviceProp : vk.PhysicalDeviceProperties
-            vk.GetPhysicalDeviceProperties(devicePicked, &deviceProp)
+            vk.GetPhysicalDeviceProperties(device_picked, &deviceProp)
             fmt.println("GPU found: ", strings.string_from_nul_terminated_ptr(&deviceProp.deviceName[0], vk.MAX_PHYSICAL_DEVICE_NAME_SIZE))
         }
     }
@@ -312,7 +312,7 @@ main::proc()
 
         // Create Logical Device
         deviceFeature : vk.PhysicalDeviceFeatures
-        vk.GetPhysicalDeviceFeatures(devicePicked, &deviceFeature)
+        vk.GetPhysicalDeviceFeatures(device_picked, &deviceFeature)
         swapchain_extension_name: cstring = "VK_KHR_swapchain"
         deviceCreateInfo := vk.DeviceCreateInfo {
             sType = vk.StructureType.DEVICE_CREATE_INFO,
@@ -330,10 +330,25 @@ main::proc()
         }
 
         // Create instance
-        resultCreateDevice := vk.CreateDevice(devicePicked, &deviceCreateInfo, nil, &logicalDevice)
+        resultCreateDevice := vk.CreateDevice(device_picked, &deviceCreateInfo, nil, &logicalDevice)
         when ODIN_DEBUG { 
             if (resultCreateDevice != vk.Result.SUCCESS) {
                 panic("Creating instance failed")
+            }
+        }
+    }
+
+    swapchain_khr: vk.SwapchainKHR
+    {
+        surface_capabilities: vk.SurfaceCapabilitiesKHR
+        vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(device_picked, surface_khr, &surface_capabilities)
+        
+        surface_extent := surface_capabilities.currentExtent
+        if (surface_extent.width == c.UINT32_MAX) {
+            window_frame_width, window_frame_height := glfw.GetFramebufferSize(window_handle)
+            surface_extent = {
+                clamp(u32(window_frame_width), surface_capabilities.minImageExtent.width,  surface_capabilities.maxImageExtent.width),
+                clamp(u32(window_frame_height), surface_capabilities.minImageExtent.height,  surface_capabilities.maxImageExtent.height),
             }
         }
     }
@@ -345,7 +360,7 @@ main::proc()
     }
 
     // Main loop
-    for !glfw.WindowShouldClose(windowHandle) {
+    for !glfw.WindowShouldClose(window_handle) {
         glfw.PollEvents();
     }
 
@@ -359,6 +374,6 @@ main::proc()
     vk.DestroyDevice(logicalDevice, nil)
     vk.DestroySurfaceKHR(vkInstance, surface_khr, nil)
     vk.DestroyInstance(vkInstance, nil)
-    glfw.DestroyWindow(windowHandle);
+    glfw.DestroyWindow(window_handle);
     glfw.Terminate();
 }
