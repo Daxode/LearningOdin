@@ -574,6 +574,31 @@ main::proc()
         }
     }
 
+    // Create framebuffers
+    framebuffers := make([]vk.Framebuffer, len(swapchain_image_views))
+    defer delete(framebuffers)
+    {
+        for image_view, i in &swapchain_image_views {
+            framebuffer_createinfo := vk.FramebufferCreateInfo {
+                sType = vk.StructureType.FRAMEBUFFER_CREATE_INFO,
+                renderPass = renderpass,
+                attachmentCount = 1,
+                pAttachments = &image_view,
+                width = surface_extent.width,
+                height = surface_extent.height,
+                layers = 1,
+            }
+
+            // Create framebuffer
+            result_framebuffers := vk.CreateFramebuffer(logical_device, &framebuffer_createinfo, nil, &framebuffers[i])
+            when ODIN_DEBUG { 
+                if (result_framebuffers != vk.Result.SUCCESS) {
+                    panic("Creating framebuffer failed")
+                }
+            }
+        }
+    }
+
     // Main loop
     for !glfw.WindowShouldClose(window_handle) {
         glfw.PollEvents();
@@ -586,6 +611,10 @@ main::proc()
         }
     }
 
+    for framebuffer in framebuffers {
+        vk.DestroyFramebuffer(logical_device, framebuffer, nil)
+    }
+    vk.DestroyPipeline(logical_device, pipeline, nil)
     vk.DestroyPipelineLayout(logical_device, pipeline_layout, nil)
     vk.DestroyRenderPass(logical_device, renderpass,nil)
     for image_view in swapchain_image_views {
