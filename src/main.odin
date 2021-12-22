@@ -428,8 +428,6 @@ main::proc()
     // Set up Graphics Pipeline
     {
         triangle_vert_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_vert.spv", logical_device)
-        triangle_frag_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_frag.spv", logical_device)
-
         triangle_vert_shader_stage := vk.PipelineShaderStageCreateInfo {
             sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
             stage = {.VERTEX},
@@ -437,6 +435,7 @@ main::proc()
             pName = "main",
         }
 
+        triangle_frag_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_frag.spv", logical_device)
         triangle_frag_shader_stage := vk.PipelineShaderStageCreateInfo {
             sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
             stage = {.FRAGMENT},
