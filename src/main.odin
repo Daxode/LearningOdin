@@ -429,6 +429,21 @@ main::proc()
     {
         triangle_vert_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_vert.spv", logical_device)
         triangle_frag_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_frag.spv", logical_device)
+
+        triangle_vert_shader_stage := vk.PipelineShaderStageCreateInfo {
+            sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
+            stage = {.VERTEX},
+            module = triangle_vert_shader_module,
+            pName = "main",
+        }
+
+        triangle_frag_shader_stage := vk.PipelineShaderStageCreateInfo {
+            sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
+            stage = {.FRAGMENT},
+            module = triangle_frag_shader_module,
+            pName = "main",
+        }
+
         defer vk.DestroyShaderModule(logical_device, triangle_vert_shader_module, nil)
         defer vk.DestroyShaderModule(logical_device, triangle_frag_shader_module, nil)
         
