@@ -40,7 +40,9 @@ main::proc()
     }
 
     // Create GLFW Window
+    defer glfw.Terminate();
     window_handle: glfw.WindowHandle
+    defer glfw.DestroyWindow(window_handle);
     {
         glfw.Init();
         glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
@@ -88,6 +90,7 @@ main::proc()
 
     // Create Instance and External Debug Messenger
     app_instance: vk.Instance
+    defer vk.DestroyInstance(app_instance, nil)
     when ODIN_DEBUG {debugMessengerEXT: vk.DebugUtilsMessengerEXT}
     {
         instance_createinfo : vk.InstanceCreateInfo;
@@ -159,6 +162,7 @@ main::proc()
 
     // Get window surface
     surface_khr : vk.SurfaceKHR
+    defer vk.DestroySurfaceKHR(app_instance, surface_khr, nil)
     {
         resultCreateWindowSurface := glfw.CreateWindowSurface(app_instance, window_handle, nil, &surface_khr)
         when ODIN_DEBUG { 
@@ -293,6 +297,7 @@ main::proc()
     
     // Create Logical Device
     logical_device : vk.Device
+    defer vk.DestroyDevice(logical_device, nil)
     {
         u32set :: bit_set[u32(0)..<u32(32);u32]
         famIndexSet := u32set{famIndexGraphics, famIndexPresentation}
@@ -341,6 +346,7 @@ main::proc()
 
     // Create swapchain
     swapchain_khr: vk.SwapchainKHR
+    defer vk.DestroySwapchainKHR(logical_device, swapchain_khr, nil)
     surface_extent: vk.Extent2D
     {
         surface_capabilities: vk.SurfaceCapabilitiesKHR
@@ -386,10 +392,14 @@ main::proc()
         }
     }
 
+    // Get images from swapchain
     swapchain_images: []vk.Image
     swapchain_image_views : []vk.ImageView
     defer delete(swapchain_images)
-    defer delete(swapchain_image_views)
+    defer for image_view in swapchain_image_views {
+        vk.DestroyImageView(logical_device, image_view, nil)
+    }
+
     {
         // Get image count
         image_count: u32
@@ -427,6 +437,7 @@ main::proc()
 
     // Setup RenderPass
     renderpass: vk.RenderPass
+    defer vk.DestroyRenderPass(logical_device, renderpass, nil)
     {
         attachment_description := vk.AttachmentDescription {
             format = surface_format.format,
@@ -464,7 +475,9 @@ main::proc()
 
     // Set up Graphics Pipeline
     pipeline_layout: vk.PipelineLayout
+    defer vk.DestroyPipelineLayout(logical_device, pipeline_layout, nil)
     pipeline: vk.Pipeline
+    defer vk.DestroyPipeline(logical_device, pipeline, nil)
     {
         triangle_vert_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_vert.spv", logical_device)
         defer vk.DestroyShaderModule(logical_device, triangle_vert_shader_module, nil)
@@ -577,6 +590,10 @@ main::proc()
     // Create framebuffers
     framebuffers := make([]vk.Framebuffer, len(swapchain_image_views))
     defer delete(framebuffers)
+    defer for framebuffer in framebuffers {
+        vk.DestroyFramebuffer(logical_device, framebuffer, nil)
+    }
+
     {
         for image_view, i in &swapchain_image_views {
             framebuffer_createinfo := vk.FramebufferCreateInfo {
@@ -610,22 +627,6 @@ main::proc()
             DestroyDebugUtilsMessengerEXT(app_instance, debugMessengerEXT, nil);
         }
     }
-
-    for framebuffer in framebuffers {
-        vk.DestroyFramebuffer(logical_device, framebuffer, nil)
-    }
-    vk.DestroyPipeline(logical_device, pipeline, nil)
-    vk.DestroyPipelineLayout(logical_device, pipeline_layout, nil)
-    vk.DestroyRenderPass(logical_device, renderpass,nil)
-    for image_view in swapchain_image_views {
-        vk.DestroyImageView(logical_device, image_view, nil)
-    }
-    vk.DestroySwapchainKHR(logical_device, swapchain_khr, nil)
-    vk.DestroyDevice(logical_device, nil)
-    vk.DestroySurfaceKHR(app_instance, surface_khr, nil)
-    vk.DestroyInstance(app_instance, nil)
-    glfw.DestroyWindow(window_handle);
-    glfw.Terminate();
 }
 
 CreateShaderModuleFromDevice :: proc(path: string, device: vk.Device) -> (shader_module: vk.ShaderModule, success: bool) {
