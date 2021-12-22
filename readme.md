@@ -1,7 +1,7 @@
 # DraxEngine
 A small engine made by @Daxode to help him learn Odin, and Vulkan, 
 this will increase greatly in size as time continues, 
-as it's also meant as a scaling execersise in how to right maintable DoD code.
+as it's also meant as a scaling execersise in how to write maintable DoD code.
 
 ## Setup
 1. Install Odin [odin-lang.org]

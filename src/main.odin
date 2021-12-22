@@ -11,6 +11,8 @@ import "core:c"
 import "core:mem"
 import "core:os"
 
+// Loads all function pointers, 
+// except those that should be manually updated based on having the vulkan instance
 load_vulkan_function_pointers::proc()
 {
     lib, ok := dynlib.load_library("vulkan-1.dll", true);
@@ -629,6 +631,9 @@ main::proc()
     }
 }
 
+// Based on the given logical device, 
+// it loads the given path to a SPIR-V, 
+// and creates a shader module on the device
 CreateShaderModuleFromDevice :: proc(path: string, device: vk.Device) -> (shader_module: vk.ShaderModule, success: bool) {
     shader_bytes, read_ok := os.read_entire_file(path)
     success = read_ok
