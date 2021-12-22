@@ -51,11 +51,11 @@ main::proc()
         glfw.WindowHint(glfw.RESIZABLE, 0);
         window_handle = glfw.CreateWindow(1600, 900, "Vulkan Fun", nil, nil);
         
-        // w, h, channels: c.int
-        // icon_bytes := image.load("resources/DaxodeProfile.png",&w,&h, &channels, 0)
-        // icon := glfw.Image{w,h,icon_bytes}
-        // glfw.SetWindowIcon(window_handle, []glfw.Image{icon})
-        // image.image_free(icon_bytes)
+        w, h, channels: c.int
+        icon_bytes := image.load("resources/DaxodeProfile.png",&w,&h, &channels, 0)
+        icon := glfw.Image{w,h,icon_bytes}
+        glfw.SetWindowIcon(window_handle, []glfw.Image{icon})
+        image.image_free(icon_bytes)
     }
 
     // Check validation layers
