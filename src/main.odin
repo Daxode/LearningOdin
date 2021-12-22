@@ -169,8 +169,10 @@ main::proc()
 
     // Pick the physical device
     devicePicked: vk.PhysicalDevice
-    famIndexGraphics : u32
-    famIndexPresentation : u32
+    famIndexGraphics: u32
+    famIndexPresentation: u32
+    surface_present_mode: vk.PresentModeKHR
+    surface_format: vk.SurfaceFormatKHR
     {
         // Retrieve Physical Devices
         deviceCount : u32 = 0;
@@ -225,45 +227,50 @@ main::proc()
             deviceCurrentScore *= u32(deviceFeature.geometryShader)
             deviceCurrentScore *= u32(qFamiliesSupported == {.GRAPHICS, .PRESENTATION})
 
-            when ODIN_DEBUG {    
-                // Check for device extension support
-                device_extension_count: u32
-                vk.EnumerateDeviceExtensionProperties(device, nil, &device_extension_count, nil)
-                device_extensions := make([]vk.ExtensionProperties, device_extension_count)
-                vk.EnumerateDeviceExtensionProperties(device, nil, &device_extension_count, raw_data(device_extensions))
-                
-                swapchain_present := false
-                for device_extension in &device_extensions {
-                    swapchain_present |= cstring(&device_extension.extensionName[0]) == cstring("VK_KHR_swapchain")
-                }
-                deviceCurrentScore *= u32(swapchain_present)
+            /// Check for device extension support
+            device_extension_count: u32
+            vk.EnumerateDeviceExtensionProperties(device, nil, &device_extension_count, nil)
+            device_extensions := make([]vk.ExtensionProperties, device_extension_count)
+            vk.EnumerateDeviceExtensionProperties(device, nil, &device_extension_count, raw_data(device_extensions))
+            
+            swapchain_present := false
+            for device_extension in &device_extensions {
+                swapchain_present |= cstring(&device_extension.extensionName[0]) == cstring("VK_KHR_swapchain")
+            }
+            deviceCurrentScore *= u32(swapchain_present)
 
-                // Check Device Surface
-                surface_capabilities: vk.SurfaceCapabilitiesKHR
-                vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface_khr, &surface_capabilities)
+            /// Check Device Surface
+            //// Allocate surface formats and present modes buffer
+            format_count: u32
+            vk.GetPhysicalDeviceSurfaceFormatsKHR(device,surface_khr,&format_count,nil)
+            present_mode_count: u32
+            vk.GetPhysicalDeviceSurfacePresentModesKHR(device,surface_khr,&present_mode_count,nil)
 
-                format_count: u32
-                vk.GetPhysicalDeviceSurfaceFormatsKHR(device,surface_khr,&format_count,nil)
-                present_mode_count: u32
-                vk.GetPhysicalDeviceSurfacePresentModesKHR(device,surface_khr,&present_mode_count,nil)
-
-                present_mode_size := size_of(vk.PresentModeKHR)   * present_mode_count
-                format_size  := size_of(vk.SurfaceFormatKHR) * format_count
-                surface_present_and_format_buffer, _ := mem.alloc_bytes(int(present_mode_size + format_size))
-                present_mode_buffer := mem.slice_data_cast([]vk.PresentModeKHR,   surface_present_and_format_buffer[:present_mode_size])
-                format_buffer  := mem.slice_data_cast([]vk.SurfaceFormatKHR, surface_present_and_format_buffer[present_mode_size:])
-
-                vk.GetPhysicalDeviceSurfaceFormatsKHR(device,surface_khr,&format_count,raw_data(format_buffer))
-                vk.GetPhysicalDeviceSurfacePresentModesKHR(device,surface_khr,&present_mode_count,raw_data(present_mode_buffer))
-
-                for format in format_buffer {
-                    fmt.println(format)
-                }
-
-                for present_mode in present_mode_buffer {
-                    fmt.println(present_mode)
+            present_mode_size := size_of(vk.PresentModeKHR)   * present_mode_count
+            format_size  := size_of(vk.SurfaceFormatKHR) * format_count
+            surface_present_and_format_buffer, _ := mem.alloc_bytes(size=int(present_mode_size + format_size), allocator=context.temp_allocator)
+            
+            //// Fill buffers
+            surface_present_modes := mem.slice_data_cast([]vk.PresentModeKHR,   surface_present_and_format_buffer[:present_mode_size])
+            surface_formats := mem.slice_data_cast([]vk.SurfaceFormatKHR, surface_present_and_format_buffer[present_mode_size:])
+            vk.GetPhysicalDeviceSurfaceFormatsKHR(device,surface_khr,&format_count,raw_data(surface_formats))
+            vk.GetPhysicalDeviceSurfacePresentModesKHR(device,surface_khr,&present_mode_count,raw_data(surface_present_modes))
+            
+            surface_format = surface_formats[0]
+            for format in surface_formats {
+                if format.format == vk.Format.B8G8R8A8_SRGB {
+                    surface_format = format
                 }
             }
+
+            surface_present_mode = vk.PresentModeKHR.FIFO
+            for present_mode in surface_present_mode {
+                if present_mode == vk.PresentModeKHR.FIFO_RELAXED {
+                    surface_format = format
+                }
+            }
+            
+            deviceCurrentScore *= u32(len(surface_present_modes)>0 && len(surface_formats)>0)
 
             // Resolve Score
             if deviceCurrentScore > deviceBestScore {
