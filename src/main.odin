@@ -464,6 +464,7 @@ main::proc()
 
     // Set up Graphics Pipeline
     pipeline_layout: vk.PipelineLayout
+    pipeline: vk.Pipeline
     {
         triangle_vert_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_vert.spv", logical_device)
         defer vk.DestroyShaderModule(logical_device, triangle_vert_shader_module, nil)
@@ -482,6 +483,8 @@ main::proc()
             module = triangle_frag_shader_module,
             pName = "main",
         }
+
+        triangle_shader_stages := [?]vk.PipelineShaderStageCreateInfo {triangle_vert_shader_stage, triangle_frag_shader_stage}
 
         // How vertex data should be handled
         vertex_input_createinfo := vk.PipelineVertexInputStateCreateInfo {sType = vk.StructureType.PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO}
@@ -545,6 +548,28 @@ main::proc()
         when ODIN_DEBUG { 
             if (result_pipeline_layout != vk.Result.SUCCESS) {
                 panic("Creating pipeline layout failed")
+            }
+        }
+
+        pipeline_createinfo := vk.GraphicsPipelineCreateInfo{
+            sType = vk.StructureType.GRAPHICS_PIPELINE_CREATE_INFO,
+            stageCount = 2,
+            pStages = &triangle_shader_stages[0],
+            pVertexInputState = &vertex_input_createinfo,
+            pInputAssemblyState = &assembly_input_createinfo,
+            pViewportState = &viewport_state_createinfo,
+            pRasterizationState = &rasterizer_createinfo,
+            pMultisampleState = &multisampling_createinfo,
+            pColorBlendState = &blend_createinfo,
+            pDynamicState = &dynamic_state_createinfo,
+            layout = pipeline_layout,
+            renderPass = renderpass,
+        }
+
+        result_pipeline := vk.CreateGraphicsPipelines(logical_device, 0, 1, &pipeline_createinfo, nil, &pipeline)
+        when ODIN_DEBUG { 
+            if (result_pipeline != vk.Result.SUCCESS) {
+                panic("Creating graphics pipeline failed")
             }
         }
     }
