@@ -349,6 +349,14 @@ main::proc()
             }
         }
     }
+    
+    // Get Queues
+    queue_graphics: vk.Queue
+    queue_presentation: vk.Queue
+    {
+        vk.GetDeviceQueue(logical_device, famIndexGraphics, 0, &queue_graphics)
+        vk.GetDeviceQueue(logical_device, famIndexPresentation, 0, &queue_presentation)
+    }
 
     // Create swapchain
     swapchain_khr: vk.SwapchainKHR
@@ -698,28 +706,40 @@ main::proc()
         }
     }
 
-    // Create semaphores
-    semaphore_image_available: vk.Semaphore
-    defer vk.DestroySemaphore(logical_device,semaphore_image_available,nil)
-    semaphore_render_finished: vk.Semaphore
-    defer vk.DestroySemaphore(logical_device,semaphore_render_finished,nil)
+    // Create semaphores and fences
+    FRAME_IN_Q_MAX : u8 : 6
+    semaphores_image_available: [FRAME_IN_Q_MAX]vk.Semaphore
+    defer for semaphore_image_available in semaphores_image_available {
+        vk.DestroySemaphore(logical_device,semaphore_image_available,nil)
+    }
+    semaphores_render_finished: [FRAME_IN_Q_MAX]vk.Semaphore
+    defer for semaphore_render_finished in semaphores_render_finished {
+        vk.DestroySemaphore(logical_device,semaphore_render_finished,nil)
+    }
+    fences_from_image_index: [FRAME_IN_Q_MAX]vk.Fence
+    defer for fence_from_image_index in fences_from_image_index {
+        vk.DestroyFence(logical_device,fence_from_image_index,nil)
+    }
     {
         semaphore_createinfo := vk.SemaphoreCreateInfo{sType= vk.StructureType.SEMAPHORE_CREATE_INFO}
-        result_semaphore_image_available := vk.CreateSemaphore(logical_device, &semaphore_createinfo, nil, &semaphore_image_available)
-        result_semaphore_render_finished := vk.CreateSemaphore(logical_device, &semaphore_createinfo, nil, &semaphore_render_finished)
-        when ODIN_DEBUG {
-            if (result_semaphore_image_available != vk.Result.SUCCESS || result_semaphore_render_finished != vk.Result.SUCCESS) {
-                panic("Creating semaphores failed")
+        fence_createinfo := vk.FenceCreateInfo{sType= vk.StructureType.FENCE_CREATE_INFO,flags={.SIGNALED}}
+
+        for i in 0..<FRAME_IN_Q_MAX {
+            result_semaphore_image_available := vk.CreateSemaphore(logical_device, &semaphore_createinfo, nil, &semaphores_image_available[i])
+            result_semaphore_render_finished := vk.CreateSemaphore(logical_device, &semaphore_createinfo, nil, &semaphores_render_finished[i])
+            when ODIN_DEBUG {
+                if (result_semaphore_image_available != vk.Result.SUCCESS || result_semaphore_render_finished != vk.Result.SUCCESS) {
+                    panic("Creating semaphores failed")
+                }
+            }
+
+            result_fences_from_image_index := vk.CreateFence(logical_device, &fence_createinfo, nil, &fences_from_image_index[i])
+            when ODIN_DEBUG {
+                if (result_fences_from_image_index != vk.Result.SUCCESS) {
+                    panic("Creating fence failed")
+                }
             }
         }
-    }
-
-    queue_graphics: vk.Queue
-    queue_presentation: vk.Queue
-    // Get Queues
-    {
-        vk.GetDeviceQueue(logical_device, famIndexGraphics, 0, &queue_graphics)
-        vk.GetDeviceQueue(logical_device, famIndexPresentation, 0, &queue_presentation)
     }
 
     time_start := time.tick_now()
