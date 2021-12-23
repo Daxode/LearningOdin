@@ -10,6 +10,7 @@ import "vendor:stb/image"
 import "core:c"
 import "core:mem"
 import "core:os"
+import "core:time"
 
 // Loads all function pointers, 
 // except those that should be manually updated based on having the vulkan instance
@@ -718,44 +719,58 @@ main::proc()
         vk.GetDeviceQueue(logical_device, famIndexPresentation, 0, &queue_presentation)
     }
 
+    time_start := time.tick_now()
+    time_frame_last := time_start
+    time_frame_current: time.Tick
+    time_delta: f64 = 0
     // Main loop
     for !glfw.WindowShouldClose(window_handle) {
+        time_frame_current = time.tick_now()
+        time_delta = time.duration_seconds(time.tick_diff(time_frame_last, time_frame_current))
         glfw.PollEvents();
 
         // Draw frame
-        image_index: u32
-        vk.AcquireNextImageKHR(logical_device, swapchain_khr, c.UINT64_MAX, semaphore_image_available, 0, &image_index)
-        wait_mask := vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT}
-        submit_info := vk.SubmitInfo {
-            sType = vk.StructureType.SUBMIT_INFO,
-            waitSemaphoreCount = 1,
-            pWaitSemaphores = &semaphore_image_available,
-            pWaitDstStageMask = &wait_mask,
-            commandBufferCount = 1,
-            pCommandBuffers = &command_buffers[image_index],
-            signalSemaphoreCount = 1,
-            pSignalSemaphores = &semaphore_render_finished,
-        }
-
-        result_queue_submit := vk.QueueSubmit(queue_graphics, 1, &submit_info, 0)
-        when ODIN_DEBUG {
-            if result_queue_submit != vk.Result.SUCCESS {
-                panic("Submitting queue failed")
+        {
+            // Acquire image to draw
+            image_index: u32
+            vk.AcquireNextImageKHR(logical_device, swapchain_khr, c.UINT64_MAX, semaphore_image_available, 0, &image_index)
+            // Submit the command to draw
+            wait_mask := vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT}
+            submit_info := vk.SubmitInfo {
+                sType = vk.StructureType.SUBMIT_INFO,
+                waitSemaphoreCount = 1,
+                pWaitSemaphores = &semaphore_image_available,
+                pWaitDstStageMask = &wait_mask,
+                commandBufferCount = 1,
+                pCommandBuffers = &command_buffers[image_index],
+                signalSemaphoreCount = 1,
+                pSignalSemaphores = &semaphore_render_finished,
             }
+            result_queue_submit := vk.QueueSubmit(queue_graphics, 1, &submit_info, 0)
+            when ODIN_DEBUG {
+                if result_queue_submit != vk.Result.SUCCESS {
+                    panic("Submitting queue failed")
+                }
+            }
+    
+            // Present Result
+            present_info := vk.PresentInfoKHR {
+                sType = vk.StructureType.PRESENT_INFO_KHR,
+                waitSemaphoreCount = 1,
+                pWaitSemaphores = &semaphore_render_finished,
+                swapchainCount = 1,
+                pSwapchains = &swapchain_khr,
+                pImageIndices = &image_index,
+            }
+            vk.QueuePresentKHR(queue_presentation, &present_info)
+
+            vk.QueueWaitIdle(queue_presentation)
+            vk.QueueWaitIdle(queue_graphics)
         }
 
-        present_info := vk.PresentInfoKHR {
-            sType = vk.StructureType.PRESENT_INFO_KHR,
-            waitSemaphoreCount = 1,
-            pWaitSemaphores = &semaphore_render_finished,
-            swapchainCount = 1,
-            pSwapchains = &swapchain_khr,
-            pImageIndices = &image_index,
-        }
-
-        vk.QueuePresentKHR(queue_presentation, &present_info)
-        vk.QueueWaitIdle(queue_presentation)
-        vk.QueueWaitIdle(queue_graphics)
+        // After frame update
+        fmt.println("Delta Seconds:", time_delta)
+        time_frame_last = time_frame_current
     }
 
     when ODIN_DEBUG {
