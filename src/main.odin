@@ -34,6 +34,10 @@ load_vulkan_function_pointers::proc()
     });
 }
 
+u32set :: bit_set[u32(0)..<u32(32);u32]
+u16set :: bit_set[u16(0)..<u16(16);u16]
+u8set :: bit_set[u8(0)..<u8(8);u8]
+
 main::proc()
 {
     load_vulkan_function_pointers()
@@ -302,7 +306,6 @@ main::proc()
     logical_device : vk.Device
     defer vk.DestroyDevice(logical_device, nil)
     {
-        u32set :: bit_set[u32(0)..<u32(32);u32]
         famIndexSet := u32set{famIndexGraphics, famIndexPresentation}
 
         // Setup Queue Device CreateInfo
@@ -785,8 +788,8 @@ main::proc()
 // it loads the given path to a SPIR-V, 
 // and creates a shader module on the device
 CreateShaderModuleFromDevice :: proc(path: string, device: vk.Device) -> (shader_module: vk.ShaderModule, success: bool) {
-    shader_bytes, read_ok := os.read_entire_file(path)
-    success = read_ok
+    shader_bytes: []u8
+    shader_bytes, success = os.read_entire_file(path)
 
     createinfo := vk.ShaderModuleCreateInfo {
         sType = vk.StructureType.SHADER_MODULE_CREATE_INFO,
