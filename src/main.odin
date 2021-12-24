@@ -709,16 +709,14 @@ main::proc()
     // Create semaphores and fences
     FRAME_IN_Q_MAX : u8 : 6
     semaphores_image_available: [FRAME_IN_Q_MAX]vk.Semaphore
-    defer for semaphore_image_available in semaphores_image_available {
-        vk.DestroySemaphore(logical_device,semaphore_image_available,nil)
-    }
     semaphores_render_finished: [FRAME_IN_Q_MAX]vk.Semaphore
-    defer for semaphore_render_finished in semaphores_render_finished {
-        vk.DestroySemaphore(logical_device,semaphore_render_finished,nil)
-    }
-    fences_from_image_index: [FRAME_IN_Q_MAX]vk.Fence
-    defer for fence_from_image_index in fences_from_image_index {
-        vk.DestroyFence(logical_device,fence_from_image_index,nil)
+    fences_from_bucket_index: [FRAME_IN_Q_MAX]vk.Fence
+    fences_from_image_index:  [FRAME_IN_Q_MAX]vk.Fence
+    defer for i in 0..<FRAME_IN_Q_MAX {
+        vk.WaitForFences(logical_device, 1, &fences_from_bucket_index[i],false, c.UINT64_MAX)
+        vk.DestroySemaphore(logical_device,semaphores_image_available[i],nil)
+        vk.DestroySemaphore(logical_device,semaphores_render_finished[i],nil)
+        vk.DestroyFence(logical_device,fences_from_bucket_index[i],nil)
     }
     {
         semaphore_createinfo := vk.SemaphoreCreateInfo{sType= vk.StructureType.SEMAPHORE_CREATE_INFO}
@@ -733,9 +731,9 @@ main::proc()
                 }
             }
 
-            result_fences_from_image_index := vk.CreateFence(logical_device, &fence_createinfo, nil, &fences_from_image_index[i])
+            result_fence_from_bucket_index := vk.CreateFence(logical_device, &fence_createinfo, nil, &fences_from_bucket_index[i])
             when ODIN_DEBUG {
-                if (result_fences_from_image_index != vk.Result.SUCCESS) {
+                if (result_fence_from_bucket_index != vk.Result.SUCCESS) {
                     panic("Creating fence failed")
                 }
             }
@@ -746,6 +744,8 @@ main::proc()
     time_frame_last := time_start
     time_frame_current: time.Tick
     time_delta: f64 = 0
+
+    current_bucket_index:u8 = 0
     // Main loop
     for !glfw.WindowShouldClose(window_handle) {
         time_frame_current = time.tick_now()
@@ -754,41 +754,51 @@ main::proc()
 
         // Draw frame
         {
+            // Wait till bucket is ready
+            vk.WaitForFences(logical_device, 1, &fences_from_bucket_index[current_bucket_index], false, c.UINT64_MAX)
+            vk.ResetFences(logical_device, 1, &fences_from_bucket_index[current_bucket_index])
+
             // Acquire image to draw
             image_index: u32
-            vk.AcquireNextImageKHR(logical_device, swapchain_khr, c.UINT64_MAX, semaphore_image_available, 0, &image_index)
+            vk.AcquireNextImageKHR(logical_device, swapchain_khr, c.UINT64_MAX, semaphores_image_available[current_bucket_index], 0, &image_index)
             // Submit the command to draw
             wait_mask := vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT}
             submit_info := vk.SubmitInfo {
                 sType = vk.StructureType.SUBMIT_INFO,
                 waitSemaphoreCount = 1,
-                pWaitSemaphores = &semaphore_image_available,
+                pWaitSemaphores = &semaphores_image_available[current_bucket_index],
                 pWaitDstStageMask = &wait_mask,
                 commandBufferCount = 1,
                 pCommandBuffers = &command_buffers[image_index],
                 signalSemaphoreCount = 1,
-                pSignalSemaphores = &semaphore_render_finished,
+                pSignalSemaphores = &semaphores_render_finished[current_bucket_index],
             }
-            result_queue_submit := vk.QueueSubmit(queue_graphics, 1, &submit_info, 0)
+            
+            // Make sure to wait with submitting a queue for an image who's already in flight
+            if fences_from_image_index[image_index] != 0 {
+                vk.WaitForFences(logical_device, 1, &fences_from_image_index[image_index], false, c.UINT64_MAX)
+            }
+            
+            result_queue_submit := vk.QueueSubmit(queue_graphics, 1, &submit_info, fences_from_bucket_index[current_bucket_index])
             when ODIN_DEBUG {
                 if result_queue_submit != vk.Result.SUCCESS {
                     panic("Submitting queue failed")
                 }
             }
+            fences_from_image_index[image_index] = fences_from_bucket_index[current_bucket_index]
     
             // Present Result
             present_info := vk.PresentInfoKHR {
                 sType = vk.StructureType.PRESENT_INFO_KHR,
                 waitSemaphoreCount = 1,
-                pWaitSemaphores = &semaphore_render_finished,
+                pWaitSemaphores = &semaphores_render_finished[current_bucket_index],
                 swapchainCount = 1,
                 pSwapchains = &swapchain_khr,
                 pImageIndices = &image_index,
             }
             vk.QueuePresentKHR(queue_presentation, &present_info)
 
-            vk.QueueWaitIdle(queue_presentation)
-            vk.QueueWaitIdle(queue_graphics)
+            current_bucket_index = (current_bucket_index+1)%FRAME_IN_Q_MAX
         }
 
         // After frame update
