@@ -16,21 +16,19 @@ import "core:time"
 // except those that should be manually updated based on having the vulkan instance
 load_vulkan_function_pointers::proc()
 {
-    lib, ok := dynlib.load_library("vulkan-1.dll", true);
-    assert(ok);
+    lib, ok := dynlib.load_library("vulkan-1.dll", true)
+    assert(ok)
 
-    context.user_ptr = &lib;
+    context.user_ptr = &lib
 
     vk.load_proc_addresses(proc(p: rawptr, name: cstring) {
-        lib := (cast(^dynlib.Library)context.user_ptr)^;
+        lib := (cast(^dynlib.Library)context.user_ptr)^
 
-        ptr, found := dynlib.symbol_address(lib, runtime.cstring_to_string(name));
-        if !found {
-            return;
-        }
+        found_ptr, found := dynlib.symbol_address(lib, runtime.cstring_to_string(name))
+        if !found {return;}
 
-        casted := cast(^rawptr)p;
-        casted^ = ptr;
+        casted := cast(^rawptr)p // Pointer to function pointer
+        casted^ = found_ptr
     });
 }
 
@@ -49,7 +47,7 @@ main::proc()
     // Create GLFW Window
     defer glfw.Terminate();
     window_handle: glfw.WindowHandle
-    defer glfw.DestroyWindow(window_handle);
+    defer glfw.DestroyWindow(window_handle)
     {
         glfw.Init();
         glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
@@ -63,25 +61,32 @@ main::proc()
         image.image_free(icon_bytes)
     }
 
-    // Check validation layers
-    {        
-        when ODIN_DEBUG {
-            layerCount : u32 = 0;
-            vk.EnumerateInstanceLayerProperties(&layerCount,nil)
-            supportedLayers := make([]vk.LayerProperties, layerCount)
-            defer delete(supportedLayers)
-            vk.EnumerateInstanceLayerProperties(&layerCount, raw_data(supportedLayers))
-            
-            doesKHRValLayerExist := false
-            for layer in &supportedLayers {
-                layerName := strings.string_from_nul_terminated_ptr(&layer.layerName[0], vk.MAX_PHYSICAL_DEVICE_NAME_SIZE)
-                fmt.println(layerName)
-                doesKHRValLayerExist |= layerName == "VK_LAYER_KHRONOS_validation"
+    // Check validation layers and for VK_EXT_debug_utils
+    when ODIN_DEBUG {
+        exists_vk_layer_khr_validation: b8 = false
+        exists_vk_ext_debug_utils: b8 = false
+        {
+            layer_count : u32 = 0;
+            vk.EnumerateInstanceLayerProperties(&layer_count,nil)
+            supported_layers := make([]vk.LayerProperties, layer_count)
+            defer delete(supported_layers)
+            vk.EnumerateInstanceLayerProperties(&layer_count, raw_data(supported_layers))
+            for layer in &supported_layers {
+                exists_vk_layer_khr_validation |= cstring(&layer.layerName[0]) == cstring("VK_LAYER_KHRONOS_validation")
             }
 
-            if(!doesKHRValLayerExist) {
-                panic("VK_LAYER_KHRONOS_validation not found")
+            extension_count : u32 = 0;
+            vk.EnumerateInstanceExtensionProperties(nil, &extension_count, nil)
+            supported_extensions := make([]vk.ExtensionProperties, extension_count)
+            defer delete(supported_extensions)
+            vk.EnumerateInstanceExtensionProperties(nil, &extension_count, raw_data(supported_extensions))
+            for extension in &supported_extensions {
+                exists_vk_ext_debug_utils |= cstring(&extension.extensionName[0]) == cstring("VK_EXT_debug_utils")
             }
+
+            fmt.println("VK_LAYER_KHRONOS_validation exists:", exists_vk_layer_khr_validation,
+                        "|",
+                        "VK_EXT_debug_utils exists:",exists_vk_ext_debug_utils)
         }
     }
 
@@ -90,7 +95,7 @@ main::proc()
         sType = vk.StructureType.APPLICATION_INFO,
         pApplicationName = "Hello Triangle",
         applicationVersion = vk.MAKE_VERSION(1,0,0),
-        pEngineName = "No Engine",
+        pEngineName = "Dax Engine",
         engineVersion = vk.MAKE_VERSION(1,0,0),
         apiVersion = vk.API_VERSION_1_0,
     }
@@ -100,69 +105,84 @@ main::proc()
     defer vk.DestroyInstance(app_instance, nil)
     when ODIN_DEBUG {debugMessengerEXT: vk.DebugUtilsMessengerEXT}
     {
-        instance_createinfo : vk.InstanceCreateInfo;
-        instance_createinfo.sType = vk.StructureType.INSTANCE_CREATE_INFO;
-        instance_createinfo.pApplicationInfo = &appInfo;
+        instance_createinfo := vk.InstanceCreateInfo{
+            sType = vk.StructureType.INSTANCE_CREATE_INFO,
+            pApplicationInfo = &appInfo,
+        }
+        
         when ODIN_DEBUG {
-            instance_createinfo.enabledLayerCount = 1
-            layerKHRVal : cstring = "VK_LAYER_KHRONOS_validation"
-            instance_createinfo.ppEnabledLayerNames = &layerKHRVal
+            if exists_vk_layer_khr_validation {
+                instance_createinfo.enabledLayerCount = 1
+                layerKHRVal : cstring = "VK_LAYER_KHRONOS_validation"
+                instance_createinfo.ppEnabledLayerNames = &layerKHRVal
+            }
         }
 
-        requiredInstanceExtensions := glfw.GetRequiredInstanceExtensions();
+        required_instance_extensions := glfw.GetRequiredInstanceExtensions();
         when ODIN_DEBUG {
-            enabledExtensions := make([]cstring, len(requiredInstanceExtensions)+1)
-            defer delete(enabledExtensions)
-            copy(enabledExtensions[:], requiredInstanceExtensions[:])
-            enabledExtensions[len(enabledExtensions)-1] = "VK_EXT_debug_utils"
-            instance_createinfo.ppEnabledExtensionNames = raw_data(enabledExtensions);
-            instance_createinfo.enabledExtensionCount = u32(len(enabledExtensions));
+            enabled_extensions: []cstring
+            defer if exists_vk_ext_debug_utils{delete(enabled_extensions)} 
+            // Append VK_EXT_debug_utils to list of required_instance_extensions
+            if exists_vk_ext_debug_utils {
+                enabled_extensions := make([]cstring, len(required_instance_extensions)+1)
+                copy(enabled_extensions[:], required_instance_extensions[:])
+                enabled_extensions[len(enabled_extensions)-1] = "VK_EXT_debug_utils"
+                instance_createinfo.ppEnabledExtensionNames = raw_data(enabled_extensions);
+                instance_createinfo.enabledExtensionCount = u32(len(enabled_extensions));
+            } else {
+                instance_createinfo.ppEnabledExtensionNames = raw_data(required_instance_extensions);
+                instance_createinfo.enabledExtensionCount = u32(len(required_instance_extensions));
+            }
         } else {
-            instance_createinfo.ppEnabledExtensionNames = raw_data(requiredInstanceExtensions);
-            instance_createinfo.enabledExtensionCount = u32(len(requiredInstanceExtensions));
+            instance_createinfo.ppEnabledExtensionNames = raw_data(required_instance_extensions);
+            instance_createinfo.enabledExtensionCount = u32(len(required_instance_extensions));
         }
 
         // Create Debugger
         when ODIN_DEBUG {
-            debugCreateInfo := vk.DebugUtilsMessengerCreateInfoEXT {
-                sType = vk.StructureType.DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-                messageSeverity = {.VERBOSE, .INFO, .WARNING, .ERROR},
-                messageType = {.GENERAL, .VALIDATION, .PERFORMANCE},
-                pfnUserCallback = vk.ProcDebugUtilsMessengerCallbackEXT(proc(
-                    msgSeverity: vk.DebugUtilsMessageSeverityFlagsEXT, msgTypes: vk.DebugUtilsMessageTypeFlagsEXT, 
-                    pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT, pUserData: rawptr) {
-                        severityString := ""
-                        if .VERBOSE in msgSeverity {
-                            severityString = "VK[V]:"
-                        } else if .INFO in msgSeverity {
-                            severityString = "VK[I]:"
-                        } else if .WARNING in msgSeverity {
-                            severityString = "VK[W]:"
-                        } else if .ERROR in msgSeverity {
-                            severityString = "VK[E]:"
-                        }
-
-                        fmt.println(severityString, pCallbackData^.pMessage)
-                    }),
+            debug_createinfo: vk.DebugUtilsMessengerCreateInfoEXT
+            if exists_vk_ext_debug_utils {
+                debug_createinfo = {
+                    sType = vk.StructureType.DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+                    messageSeverity = {.VERBOSE, .INFO, .WARNING, .ERROR},
+                    messageType = {.GENERAL, .VALIDATION, .PERFORMANCE},
+                    pfnUserCallback = vk.ProcDebugUtilsMessengerCallbackEXT(proc(
+                        msgSeverity: vk.DebugUtilsMessageSeverityFlagsEXT, msgTypes: vk.DebugUtilsMessageTypeFlagsEXT, 
+                        pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT, pUserData: rawptr) {
+                            severityString := ""
+                            if .VERBOSE in msgSeverity {
+                                severityString = "VK[V]:"
+                            } else if .INFO in msgSeverity {
+                                severityString = "VK[I]:"
+                            } else if .WARNING in msgSeverity {
+                                severityString = "VK[W]:"
+                            } else if .ERROR in msgSeverity {
+                                severityString = "VK[E]:"
+                            }
+    
+                            fmt.println(severityString, pCallbackData^.pMessage)
+                        }),
+                }
+                instance_createinfo.pNext = &debug_createinfo
             }
-
-            instance_createinfo.pNext = cast(rawptr) &debugCreateInfo
         }
 
         // Create instance
-        resultCreateInstance := vk.CreateInstance(&instance_createinfo, nil, &app_instance)
+        result_create_instance := vk.CreateInstance(&instance_createinfo, nil, &app_instance)
         when ODIN_DEBUG { 
-            if (resultCreateInstance != vk.Result.SUCCESS) {
+            if (result_create_instance != vk.Result.SUCCESS) {
                 panic("Creating Vulkan instance failed");
             }
         }
 
         when ODIN_DEBUG {
-            CreateDebugUtilsMessengerEXT := vk.ProcCreateDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(app_instance, "vkCreateDebugUtilsMessengerEXT"));
-            if (CreateDebugUtilsMessengerEXT != nil) {
-                CreateDebugUtilsMessengerEXT(app_instance, &debugCreateInfo, nil, &debugMessengerEXT)
-            } else {
-                panic("vk.Result.ERROR_EXTENSION_NOT_PRESENT");
+            if exists_vk_ext_debug_utils {
+                CreateDebugUtilsMessengerEXT := vk.ProcCreateDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(app_instance, "vkCreateDebugUtilsMessengerEXT"));
+                if (CreateDebugUtilsMessengerEXT != nil) {
+                    CreateDebugUtilsMessengerEXT(app_instance, &debug_createinfo, nil, &debugMessengerEXT)
+                } else {
+                    fmt.println("vkCreateDebugUtilsMessengerEXT not found");
+                }
             }
         }
     }
@@ -174,7 +194,7 @@ main::proc()
         resultCreateWindowSurface := glfw.CreateWindowSurface(app_instance, window_handle, nil, &surface_khr)
         when ODIN_DEBUG { 
             if (resultCreateWindowSurface != vk.Result.SUCCESS) {
-                panic("Creating instance failed")
+                panic("Creating window surface failed")
             }
         }
     }
@@ -773,7 +793,7 @@ main::proc()
                 signalSemaphoreCount = 1,
                 pSignalSemaphores = &semaphores_render_finished[current_bucket_index],
             }
-            
+
             // Make sure to wait with submitting a queue for an image who's already in flight
             if fences_from_image_index[image_index] != 0 {
                 vk.WaitForFences(logical_device, 1, &fences_from_image_index[image_index], false, c.UINT64_MAX)
