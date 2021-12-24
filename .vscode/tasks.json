@@ -17,6 +17,16 @@
             "label": "Build Release",
             "type": "process",
             "command": "build/build_release.bat",
+        },
+        {
+            "label": "Build Optimal Assembly",
+            "type": "process",
+            "command": "build/build_optimal_assembly.bat",
+        },
+        {
+            "label": "Build Optimal LLVM IR",
+            "type": "process",
+            "command": "build/build_optimal_llvm_ir.bat"
         }
     ]
 }
