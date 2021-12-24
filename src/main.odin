@@ -246,6 +246,8 @@ main::proc()
                     famIndexPresentation = index
                     qFamiliesSupported |= {.PRESENTATION}
                 }
+
+                fmt.println("QueueCount:",qFamily.queueCount, qFamily.queueFlags, "HasPresentation:",presentSupport)
             }
 
             // Calculate Score
@@ -311,7 +313,7 @@ main::proc()
             }
 
             when ODIN_DEBUG {
-                fmt.println(strings.string_from_nul_terminated_ptr(&deviceProp.deviceName[0], vk.MAX_PHYSICAL_DEVICE_NAME_SIZE))
+                fmt.println("Checked device:", cstring(&deviceProp.deviceName[0]))
             }
         }
 
@@ -702,7 +704,7 @@ main::proc()
                 }
             }
 
-            clear_color := vk.ClearValue {color={float32={0., 0., 0., 1.}}}
+            clear_color := vk.ClearValue {color={float32={0.01, 0.01, 0.01, 1.}}}
             renderpass_begin_info := vk.RenderPassBeginInfo {
                 sType = vk.StructureType.RENDER_PASS_BEGIN_INFO,
                 renderPass = renderpass,
