@@ -36,6 +36,13 @@ u32set :: bit_set[u32(0)..<u32(32);u32]
 u16set :: bit_set[u16(0)..<u16(16);u16]
 u8set :: bit_set[u8(0)..<u8(8);u8]
 
+FRAME_IN_Q_MAX : u8 : 6
+WindowState :: struct { // Use for state not for argument passing with callback
+    window_handle: glfw.WindowHandle,
+    fences_from_bucket_index: [FRAME_IN_Q_MAX]vk.Fence,
+    logical_device: vk.Device,
+}
+
 main::proc()
 {
     load_vulkan_function_pointers()
@@ -44,15 +51,35 @@ main::proc()
         fmt.println("debug enabled")
     }
 
+    window_state: WindowState
+    using window_state
+
     // Create GLFW Window
     defer glfw.Terminate();
-    window_handle: glfw.WindowHandle
     defer glfw.DestroyWindow(window_handle)
     {
         glfw.Init();
         glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
-        glfw.WindowHint(glfw.RESIZABLE, 0);
-        window_handle = glfw.CreateWindow(1600, 1200, "Vulkan Fun", nil, nil);
+        glfw.WindowHint(glfw.MAXIMIZED,0)
+        window_handle = glfw.CreateWindow(512, 512, "Vulkan Fun", nil, nil);
+
+        glfw.SetWindowUserPointer(window_handle, &window_state)
+        glfw.SetKeyCallback(window_handle, glfw.KeyProc(proc(window_handle: glfw.WindowHandle, key, scancode, action, mods: c.int){
+            if action == glfw.PRESS {
+                switch key {
+                    case glfw.KEY_F1:
+                        //glfw.SetWindowMonitor()
+                    case glfw.KEY_ESCAPE:
+                        glfw.SetWindowShouldClose(window_handle, true)
+                }
+            }
+        }))
+
+        glfw.SetFramebufferSizeCallback(window_handle, glfw.FramebufferSizeProc(proc(window_handle: glfw.WindowHandle, width, height: c.int){
+            window_state := (^WindowState)(glfw.GetWindowUserPointer(window_handle))^
+            fmt.println("Frame buffer size changed")
+            vk.WaitForFences(window_state.logical_device, u32(FRAME_IN_Q_MAX), &window_state.fences_from_bucket_index[0], true, c.UINT64_MAX)
+        }))
         
         w, h, channels: c.int
         icon_bytes := image.load("resources/DaxodeProfile.png",&w,&h, &channels, 0)
@@ -325,7 +352,6 @@ main::proc()
     }
     
     // Create Logical Device
-    logical_device : vk.Device
     defer vk.DestroyDevice(logical_device, nil)
     {
         family_index_set := u32set{family_index_graphics, family_index_presentation}
@@ -719,7 +745,7 @@ main::proc()
                 }
             }
 
-            clear_color := vk.ClearValue {color={float32={0.01, 0.01, 0.01, 1.}}}
+            clear_color := vk.ClearValue {color={float32={0.01, 0.01, 0.01, 0.5}}}
             renderpass_begin_info := vk.RenderPassBeginInfo {
                 sType = vk.StructureType.RENDER_PASS_BEGIN_INFO,
                 renderPass = renderpass,
@@ -744,10 +770,8 @@ main::proc()
     }
 
     // Create semaphores and fences
-    FRAME_IN_Q_MAX : u8 : 6
     semaphores_image_available: [FRAME_IN_Q_MAX]vk.Semaphore
     semaphores_render_finished: [FRAME_IN_Q_MAX]vk.Semaphore
-    fences_from_bucket_index: [FRAME_IN_Q_MAX]vk.Fence
     fences_from_image_index:  [FRAME_IN_Q_MAX]vk.Fence
     defer for i in 0..<FRAME_IN_Q_MAX {
         vk.WaitForFences(logical_device, 1, &fences_from_bucket_index[i],false, c.UINT64_MAX)
@@ -797,7 +821,8 @@ main::proc()
 
             // Acquire image to draw
             image_index: u32
-            vk.AcquireNextImageKHR(logical_device, swapchain_khr, c.UINT64_MAX, semaphores_image_available[current_bucket_index], 0, &image_index)
+            result_acquire_next_image := vk.AcquireNextImageKHR(logical_device, swapchain_khr, c.UINT64_MAX, semaphores_image_available[current_bucket_index], 0, &image_index)
+            when ODIN_DEBUG {if result_acquire_next_image!= vk.Result.SUCCESS{fmt.println("Couldn't acquire next image: ", result_acquire_next_image)}}
             // Submit the command to draw
             wait_mask := vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT}
             submit_info := vk.SubmitInfo {
@@ -833,7 +858,8 @@ main::proc()
                 pSwapchains = &swapchain_khr,
                 pImageIndices = &image_index,
             }
-            vk.QueuePresentKHR(queue_presentation, &present_info)
+            result_queue_present_khr := vk.QueuePresentKHR(queue_presentation, &present_info)
+            when ODIN_DEBUG {if result_queue_present_khr!= vk.Result.SUCCESS{fmt.println("Couldn't queue for presentation: ", result_queue_present_khr)}}
 
             current_bucket_index = (current_bucket_index+1)%FRAME_IN_Q_MAX
         }
