@@ -52,7 +52,7 @@ main::proc()
         glfw.Init();
         glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
         glfw.WindowHint(glfw.RESIZABLE, 0);
-        window_handle = glfw.CreateWindow(1600, 900, "Vulkan Fun", nil, nil);
+        window_handle = glfw.CreateWindow(1600, 1200, "Vulkan Fun", nil, nil);
         
         w, h, channels: c.int
         icon_bytes := image.load("resources/DaxodeProfile.png",&w,&h, &channels, 0)
@@ -68,8 +68,8 @@ main::proc()
         {
             layer_count : u32 = 0;
             vk.EnumerateInstanceLayerProperties(&layer_count,nil)
-            supported_layers := make([]vk.LayerProperties, layer_count)
-            defer delete(supported_layers)
+            supported_layers := make([]vk.LayerProperties, layer_count, context.temp_allocator)
+            defer delete(supported_layers, context.temp_allocator)
             vk.EnumerateInstanceLayerProperties(&layer_count, raw_data(supported_layers))
             for layer in &supported_layers {
                 exists_vk_layer_khr_validation |= cstring(&layer.layerName[0]) == cstring("VK_LAYER_KHRONOS_validation")
@@ -77,8 +77,8 @@ main::proc()
 
             extension_count : u32 = 0;
             vk.EnumerateInstanceExtensionProperties(nil, &extension_count, nil)
-            supported_extensions := make([]vk.ExtensionProperties, extension_count)
-            defer delete(supported_extensions)
+            supported_extensions := make([]vk.ExtensionProperties, extension_count, context.temp_allocator)
+            defer delete(supported_extensions, context.temp_allocator)
             vk.EnumerateInstanceExtensionProperties(nil, &extension_count, raw_data(supported_extensions))
             for extension in &supported_extensions {
                 exists_vk_ext_debug_utils |= cstring(&extension.extensionName[0]) == cstring("VK_EXT_debug_utils")
@@ -121,10 +121,10 @@ main::proc()
         required_instance_extensions := glfw.GetRequiredInstanceExtensions();
         when ODIN_DEBUG {
             enabled_extensions: []cstring
-            defer if exists_vk_ext_debug_utils{delete(enabled_extensions)} 
+            defer if exists_vk_ext_debug_utils{delete(enabled_extensions, context.temp_allocator)} 
             // Append VK_EXT_debug_utils to list of required_instance_extensions
             if exists_vk_ext_debug_utils {
-                enabled_extensions := make([]cstring, len(required_instance_extensions)+1)
+                enabled_extensions := make([]cstring, len(required_instance_extensions)+1, context.temp_allocator)
                 copy(enabled_extensions[:], required_instance_extensions[:])
                 enabled_extensions[len(enabled_extensions)-1] = "VK_EXT_debug_utils"
                 instance_createinfo.ppEnabledExtensionNames = raw_data(enabled_extensions);
@@ -201,16 +201,16 @@ main::proc()
 
     // Pick the physical device
     device_picked: vk.PhysicalDevice
-    famIndexGraphics: u32
-    famIndexPresentation: u32
+    family_index_graphics: u32
+    family_index_presentation: u32
     surface_present_mode: vk.PresentModeKHR
     surface_format: vk.SurfaceFormatKHR
     {
         // Retrieve Physical Devices
         deviceCount : u32 = 0;
         vk.EnumeratePhysicalDevices(app_instance, &deviceCount, nil)
-        devices := make([]vk.PhysicalDevice, deviceCount)
-        defer delete(devices)
+        devices := make([]vk.PhysicalDevice, deviceCount, context.temp_allocator)
+        defer delete(devices, context.temp_allocator)
         vk.EnumeratePhysicalDevices(app_instance, &deviceCount, &devices[0])
         
         // Get most suited device
@@ -219,43 +219,43 @@ main::proc()
             deviceCurrentScore : u32 = 0
             
             // Retrieve Device Data
-            deviceProp : vk.PhysicalDeviceProperties
-            vk.GetPhysicalDeviceProperties(device, &deviceProp)
+            physical_device_properties : vk.PhysicalDeviceProperties
+            vk.GetPhysicalDeviceProperties(device, &physical_device_properties)
             deviceFeature : vk.PhysicalDeviceFeatures
             vk.GetPhysicalDeviceFeatures(device, &deviceFeature)
             
             // Get Queue Family indicies
             qFamilyCount : u32 = 0
             vk.GetPhysicalDeviceQueueFamilyProperties(device, &qFamilyCount, nil)
-            qFamilies := make([]vk.QueueFamilyProperties, qFamilyCount)
-            vk.GetPhysicalDeviceQueueFamilyProperties(device, &qFamilyCount, raw_data(qFamilies))
+            queue_families := make([]vk.QueueFamilyProperties, qFamilyCount, context.temp_allocator)
+            vk.GetPhysicalDeviceQueueFamilyProperties(device, &qFamilyCount, raw_data(queue_families))
 
             QueueFamilySupports :: distinct bit_set[QueueFamilySupport; u8]
             QueueFamilySupport :: enum u8 {GRAPHICS, PRESENTATION}
             qFamiliesSupported : QueueFamilySupports
-            for qFamily, i in qFamilies {
+            for queue_family, i in queue_families {
                 index := u32(i)
-                if vk.QueueFlag.GRAPHICS in qFamily.queueFlags {
-                    famIndexGraphics = index
+                if vk.QueueFlag.GRAPHICS in queue_family.queueFlags {
+                    family_index_graphics = index
                     qFamiliesSupported |= {.GRAPHICS}
                 }
 
-                presentSupport : b32 = false
+                presentSupport: b32 = false
                 vk.GetPhysicalDeviceSurfaceSupportKHR(device, index, surface_khr, &presentSupport)
-                if (presentSupport) {
-                    famIndexPresentation = index
+                if presentSupport {
+                    family_index_presentation = index
                     qFamiliesSupported |= {.PRESENTATION}
                 }
 
-                fmt.println("QueueCount:",qFamily.queueCount, qFamily.queueFlags, "HasPresentation:",presentSupport)
+                when ODIN_DEBUG {fmt.println("QueueCount:",queue_family.queueCount, queue_family.queueFlags, "HasPresentation:",presentSupport)}
             }
 
             // Calculate Score
-            if deviceProp.deviceType == vk.PhysicalDeviceType.DISCRETE_GPU {
+            if physical_device_properties.deviceType == vk.PhysicalDeviceType.DISCRETE_GPU {
                 deviceCurrentScore += 1000
             }
 
-            deviceCurrentScore += deviceProp.limits.maxImageDimension2D;
+            deviceCurrentScore += physical_device_properties.limits.maxImageDimension2D;
 
             // Disable score
             deviceCurrentScore *= u32(deviceFeature.geometryShader)
@@ -264,7 +264,7 @@ main::proc()
             /// Check for device extension support
             device_extension_count: u32
             vk.EnumerateDeviceExtensionProperties(device, nil, &device_extension_count, nil)
-            device_extensions := make([]vk.ExtensionProperties, device_extension_count)
+            device_extensions := make([]vk.ExtensionProperties, device_extension_count, context.temp_allocator)
             vk.EnumerateDeviceExtensionProperties(device, nil, &device_extension_count, raw_data(device_extensions))
             
             swapchain_present := false
@@ -313,14 +313,14 @@ main::proc()
             }
 
             when ODIN_DEBUG {
-                fmt.println("Checked device:", cstring(&deviceProp.deviceName[0]))
+                fmt.println("Checked device:", cstring(&physical_device_properties.deviceName[0]))
             }
         }
 
         when ODIN_DEBUG {
-            deviceProp : vk.PhysicalDeviceProperties
-            vk.GetPhysicalDeviceProperties(device_picked, &deviceProp)
-            fmt.println("GPU found: ", strings.string_from_nul_terminated_ptr(&deviceProp.deviceName[0], vk.MAX_PHYSICAL_DEVICE_NAME_SIZE))
+            physical_device_properties : vk.PhysicalDeviceProperties
+            vk.GetPhysicalDeviceProperties(device_picked, &physical_device_properties)
+            fmt.println("GPU found: ", cstring(&physical_device_properties.deviceName[0]))
         }
     }
     
@@ -328,17 +328,17 @@ main::proc()
     logical_device : vk.Device
     defer vk.DestroyDevice(logical_device, nil)
     {
-        famIndexSet := u32set{famIndexGraphics, famIndexPresentation}
+        family_index_set := u32set{family_index_graphics, family_index_presentation}
 
         // Setup Queue Device CreateInfo
         queuePriority : f32 = 1
-        deviceQCreateInfos := make([dynamic]vk.DeviceQueueCreateInfo,0,4)
-        defer delete(deviceQCreateInfos)
-        for famIndex in u32(0)..<u32(32) {
-            if !(famIndex in famIndexSet) {continue}
-            append(&deviceQCreateInfos, vk.DeviceQueueCreateInfo {
+        device_queue_createinfos := make([dynamic]vk.DeviceQueueCreateInfo,0,4)
+        defer delete(device_queue_createinfos)
+        for family_index in u32(0)..<u32(32) {
+            if !(family_index in family_index_set) {continue}
+            append(&device_queue_createinfos, vk.DeviceQueueCreateInfo {
                 sType = vk.StructureType.DEVICE_QUEUE_CREATE_INFO,
-                queueFamilyIndex = famIndex,
+                queueFamilyIndex = family_index,
                 queueCount = 1,
                 pQueuePriorities = &queuePriority,
             })
@@ -350,17 +350,19 @@ main::proc()
         swapchain_extension_name: cstring = "VK_KHR_swapchain"
         deviceCreateInfo := vk.DeviceCreateInfo {
             sType = vk.StructureType.DEVICE_CREATE_INFO,
-            queueCreateInfoCount = u32(len(deviceQCreateInfos)),
-            pQueueCreateInfos = raw_data(deviceQCreateInfos),
+            queueCreateInfoCount = u32(len(device_queue_createinfos)),
+            pQueueCreateInfos = raw_data(device_queue_createinfos),
             pEnabledFeatures = &deviceFeature,
             enabledExtensionCount = 1,
             ppEnabledExtensionNames = &swapchain_extension_name,
         }
 
         when ODIN_DEBUG {
-            deviceCreateInfo.enabledLayerCount = 1
-            layerKHRVal: cstring = "VK_LAYER_KHRONOS_validation"
-            deviceCreateInfo.ppEnabledLayerNames = &layerKHRVal
+            if exists_vk_layer_khr_validation {
+                deviceCreateInfo.enabledLayerCount = 1
+                layerKHRVal: cstring = "VK_LAYER_KHRONOS_validation"
+                deviceCreateInfo.ppEnabledLayerNames = &layerKHRVal
+            }
         }
 
         // Create device
@@ -376,18 +378,29 @@ main::proc()
     queue_graphics: vk.Queue
     queue_presentation: vk.Queue
     {
-        vk.GetDeviceQueue(logical_device, famIndexGraphics, 0, &queue_graphics)
-        vk.GetDeviceQueue(logical_device, famIndexPresentation, 0, &queue_presentation)
+        vk.GetDeviceQueue(logical_device, family_index_graphics, 0, &queue_graphics)
+        vk.GetDeviceQueue(logical_device, family_index_presentation, 0, &queue_presentation)
     }
 
     // Create swapchain
-    swapchain_khr: vk.SwapchainKHR
+    surface_capabilities: vk.SurfaceCapabilitiesKHR
+    vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(device_picked, surface_khr, &surface_capabilities)
+    swapchain_khr, surface_extent := InitSwapchain(logical_device, 
+        surface_khr, window_handle, surface_capabilities, surface_format, surface_present_mode, 
+        family_index_graphics, family_index_presentation)
     defer vk.DestroySwapchainKHR(logical_device, swapchain_khr, nil)
-    surface_extent: vk.Extent2D
-    {
-        surface_capabilities: vk.SurfaceCapabilitiesKHR
-        vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(device_picked, surface_khr, &surface_capabilities)
-        
+
+    InitSwapchain :: proc(logical_device: vk.Device, 
+                          surface_khr: vk.SurfaceKHR,
+                          window_handle: glfw.WindowHandle, 
+                          surface_capabilities: vk.SurfaceCapabilitiesKHR,
+                          surface_format: vk.SurfaceFormatKHR, 
+                          surface_present_mode: vk.PresentModeKHR,
+                          family_index_graphics, family_index_presentation: u32,
+                         ) -> (
+                          swapchain_khr: vk.SwapchainKHR, 
+                          surface_extent: vk.Extent2D) {
+
         surface_extent = surface_capabilities.currentExtent
         if (surface_extent.width == c.UINT32_MAX) {
             window_frame_width, window_frame_height := glfw.GetFramebufferSize(window_handle)
@@ -412,9 +425,9 @@ main::proc()
             clipped = true, // clips from windows in front
         }
 
-        if famIndexGraphics != famIndexPresentation {
+        if family_index_graphics != family_index_presentation {
             swapchain_khr_createinfo.imageSharingMode = vk.SharingMode.CONCURRENT
-            q_family_indicies := [?]u32{famIndexGraphics, famIndexPresentation}
+            q_family_indicies := [?]u32{family_index_graphics, family_index_presentation}
             swapchain_khr_createinfo.queueFamilyIndexCount = len(q_family_indicies)
             swapchain_khr_createinfo.pQueueFamilyIndices = &(q_family_indicies)[0]
         }
@@ -426,6 +439,8 @@ main::proc()
                 panic("Creating swapchain failed")
             }
         }
+
+        return
     }
 
     // Get images from swapchain
@@ -669,7 +684,7 @@ main::proc()
     {
         command_pool_createinfo := vk.CommandPoolCreateInfo {
             sType = vk.StructureType.COMMAND_POOL_CREATE_INFO,
-            queueFamilyIndex = famIndexGraphics,
+            queueFamilyIndex = family_index_graphics,
         }
 
         result_command_pool := vk.CreateCommandPool(logical_device, &command_pool_createinfo, nil, &command_pool)
