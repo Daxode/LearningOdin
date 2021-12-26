@@ -227,12 +227,16 @@ main::proc()
     }
 
     // Pick the physical device
-    device_picked: vk.PhysicalDevice
-    family_index_graphics: u32
-    family_index_presentation: u32
-    surface_present_mode: vk.PresentModeKHR
-    surface_format: vk.SurfaceFormatKHR
-    {
+    SurfaceDevice :: struct {
+        device_picked: vk.PhysicalDevice,
+        family_index_graphics: u32,
+        family_index_presentation: u32,
+        surface_present_mode: vk.PresentModeKHR,
+        surface_format: vk.SurfaceFormatKHR,
+    }
+
+    surface_device := GetOptimalSurfaceDevice(app_instance, surface_khr)
+    GetOptimalSurfaceDevice::proc(app_instance: vk.Instance, surface_khr: vk.SurfaceKHR) -> (surface_device: SurfaceDevice) {
         // Retrieve Physical Devices
         deviceCount : u32 = 0;
         vk.EnumeratePhysicalDevices(app_instance, &deviceCount, nil)
@@ -263,14 +267,14 @@ main::proc()
             for queue_family, i in queue_families {
                 index := u32(i)
                 if vk.QueueFlag.GRAPHICS in queue_family.queueFlags {
-                    family_index_graphics = index
+                    surface_device.family_index_graphics = index
                     qFamiliesSupported |= {.GRAPHICS}
                 }
 
                 presentSupport: b32 = false
                 vk.GetPhysicalDeviceSurfaceSupportKHR(device, index, surface_khr, &presentSupport)
                 if presentSupport {
-                    family_index_presentation = index
+                    surface_device.family_index_presentation = index
                     qFamiliesSupported |= {.PRESENTATION}
                 }
 
@@ -317,17 +321,17 @@ main::proc()
             vk.GetPhysicalDeviceSurfaceFormatsKHR(device,surface_khr,&format_count,raw_data(surface_formats))
             vk.GetPhysicalDeviceSurfacePresentModesKHR(device,surface_khr,&present_mode_count,raw_data(surface_present_modes))
             
-            surface_format = surface_formats[0]
+            surface_device.surface_format = surface_formats[0]
             for format in surface_formats {
                 if format.format == vk.Format.B8G8R8A8_SRGB {
-                    surface_format = format
+                    surface_device.surface_format = format
                 }
             }
 
-            surface_present_mode = vk.PresentModeKHR.FIFO
+            surface_device.surface_present_mode = vk.PresentModeKHR.FIFO
             for present_mode in surface_present_modes {
                 if present_mode == vk.PresentModeKHR.FIFO_RELAXED {
-                    surface_present_mode = present_mode
+                    surface_device.surface_present_mode = present_mode
                 }
             }
             
@@ -335,7 +339,7 @@ main::proc()
 
             // Resolve Score
             if deviceCurrentScore > deviceBestScore {
-                device_picked = device
+                surface_device.device_picked = device
                 deviceBestScore = deviceCurrentScore
             }
 
@@ -346,15 +350,17 @@ main::proc()
 
         when ODIN_DEBUG {
             physical_device_properties : vk.PhysicalDeviceProperties
-            vk.GetPhysicalDeviceProperties(device_picked, &physical_device_properties)
+            vk.GetPhysicalDeviceProperties(surface_device.device_picked, &physical_device_properties)
             fmt.println("GPU found: ", cstring(&physical_device_properties.deviceName[0]))
         }
+
+        return
     }
     
     // Create Logical Device
     defer vk.DestroyDevice(logical_device, nil)
     {
-        family_index_set := u32set{family_index_graphics, family_index_presentation}
+        family_index_set := u32set{surface_device.family_index_graphics, surface_device.family_index_presentation}
 
         // Setup Queue Device CreateInfo
         queuePriority : f32 = 1
@@ -372,7 +378,7 @@ main::proc()
 
         // Create Logical Device
         deviceFeature : vk.PhysicalDeviceFeatures
-        vk.GetPhysicalDeviceFeatures(device_picked, &deviceFeature)
+        vk.GetPhysicalDeviceFeatures(surface_device.device_picked, &deviceFeature)
         swapchain_extension_name: cstring = "VK_KHR_swapchain"
         deviceCreateInfo := vk.DeviceCreateInfo {
             sType = vk.StructureType.DEVICE_CREATE_INFO,
@@ -392,7 +398,7 @@ main::proc()
         }
 
         // Create device
-        resultCreateDevice := vk.CreateDevice(device_picked, &deviceCreateInfo, nil, &logical_device)
+        resultCreateDevice := vk.CreateDevice(surface_device.device_picked, &deviceCreateInfo, nil, &logical_device)
         when ODIN_DEBUG { 
             if (resultCreateDevice != vk.Result.SUCCESS) {
                 panic("Creating device failed")
@@ -404,16 +410,16 @@ main::proc()
     queue_graphics: vk.Queue
     queue_presentation: vk.Queue
     {
-        vk.GetDeviceQueue(logical_device, family_index_graphics, 0, &queue_graphics)
-        vk.GetDeviceQueue(logical_device, family_index_presentation, 0, &queue_presentation)
+        vk.GetDeviceQueue(logical_device, surface_device.family_index_graphics, 0, &queue_graphics)
+        vk.GetDeviceQueue(logical_device, surface_device.family_index_presentation, 0, &queue_presentation)
     }
 
     // Create swapchain
     surface_capabilities: vk.SurfaceCapabilitiesKHR
-    vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(device_picked, surface_khr, &surface_capabilities)
+    vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(surface_device.device_picked, surface_khr, &surface_capabilities)
     swapchain_khr, surface_extent := InitSwapchain(logical_device, 
-        surface_khr, window_handle, surface_capabilities, surface_format, surface_present_mode, 
-        family_index_graphics, family_index_presentation)
+        surface_khr, window_handle, surface_capabilities, surface_device.surface_format, surface_device.surface_present_mode, 
+        surface_device.family_index_graphics, surface_device.family_index_presentation)
     defer vk.DestroySwapchainKHR(logical_device, swapchain_khr, nil)
 
     InitSwapchain :: proc(logical_device: vk.Device, 
@@ -497,7 +503,7 @@ main::proc()
                 sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
                 image = swapchain_image,
                 viewType = vk.ImageViewType.D2,
-                format = surface_format.format,
+                format = surface_device.surface_format.format,
                 components = {.IDENTITY,.IDENTITY,.IDENTITY,.IDENTITY},
                 subresourceRange = {{.COLOR}, 0,1,0,1},
             }
@@ -517,7 +523,7 @@ main::proc()
     defer vk.DestroyRenderPass(logical_device, renderpass, nil)
     {
         attachment_description := vk.AttachmentDescription {
-            format = surface_format.format,
+            format = surface_device.surface_format.format,
             samples = {._1},
             loadOp = .CLEAR,
             storeOp = .STORE,
@@ -710,7 +716,7 @@ main::proc()
     {
         command_pool_createinfo := vk.CommandPoolCreateInfo {
             sType = vk.StructureType.COMMAND_POOL_CREATE_INFO,
-            queueFamilyIndex = family_index_graphics,
+            queueFamilyIndex = surface_device.family_index_graphics,
         }
 
         result_command_pool := vk.CreateCommandPool(logical_device, &command_pool_createinfo, nil, &command_pool)
