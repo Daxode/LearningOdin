@@ -62,15 +62,15 @@ main::proc()
 
     // Create GLFW Window
     defer glfw.Terminate();
+    window_state.window_handle = CreateWindow()
     defer glfw.DestroyWindow(window_state.window_handle)
-    {
+    CreateWindow::proc() -> (window_handle: glfw.WindowHandle){
         glfw.Init();
         glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
         glfw.WindowHint(glfw.MAXIMIZED,0)
-        window_state.window_handle = glfw.CreateWindow(512, 512, "Vulkan Fun", nil, nil);
+        window_handle = glfw.CreateWindow(512, 512, "Vulkan Fun", nil, nil);
 
-        glfw.SetWindowUserPointer(window_state.window_handle, &window_state)
-        glfw.SetKeyCallback(window_state.window_handle, glfw.KeyProc(proc(window_handle: glfw.WindowHandle, key, scancode, action, mods: c.int){
+        glfw.SetKeyCallback(window_handle, glfw.KeyProc(proc(window_handle: glfw.WindowHandle, key, scancode, action, mods: c.int){
             if action == glfw.PRESS {
                 switch key {
                     case glfw.KEY_F1:
@@ -81,7 +81,7 @@ main::proc()
             }
         }))
 
-        glfw.SetFramebufferSizeCallback(window_state.window_handle, glfw.FramebufferSizeProc(proc(window_handle: glfw.WindowHandle, width, height: c.int){
+        glfw.SetFramebufferSizeCallback(window_handle, glfw.FramebufferSizeProc(proc(window_handle: glfw.WindowHandle, width, height: c.int){
             window_state := (^WindowState)(glfw.GetWindowUserPointer(window_handle))^
             fmt.println("Frame buffer size changed")
             vk.DeviceWaitIdle(window_state.logical_device)
@@ -90,9 +90,12 @@ main::proc()
         w, h, channels: c.int
         icon_bytes := image.load("resources/DaxodeProfile.png",&w,&h, &channels, 0)
         icon := glfw.Image{w,h,icon_bytes}
-        glfw.SetWindowIcon(window_state.window_handle, []glfw.Image{icon})
+        glfw.SetWindowIcon(window_handle, []glfw.Image{icon})
         image.image_free(icon_bytes)
+
+        return
     }
+    glfw.SetWindowUserPointer(window_state.window_handle, &window_state)
 
     // Check validation layers and for VK_EXT_debug_utils
     when ODIN_DEBUG {
@@ -363,6 +366,8 @@ main::proc()
     // Create Logical Device
     window_state.logical_device = CreateDevice(surface_device, window_state.exists_vk_layer_khr_validation)
     defer vk.DestroyDevice(window_state.logical_device, nil)
+
+    // Rememeber to destroy device
     CreateDevice::proc(surface_device: SurfaceDevice, exists_vk_layer_khr_validation: b8) -> (logical_device: vk.Device) {
         family_index_set := u32set{surface_device.family_index_graphics, surface_device.family_index_presentation}
 
