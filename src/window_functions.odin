@@ -366,6 +366,7 @@ InitSwapchain :: proc(logical_device: vk.Device, window_handle: glfw.WindowHandl
     return
 }
 
+// Get images from swapchain
 // Remember to delete swapchain_images to delete allocations
 CreateViewsForSwapChain::proc(logical_device: vk.Device, swapchain_khr: vk.SwapchainKHR, format: vk.Format) -> (swapchain_images: []vk.Image, swapchain_image_views : []vk.ImageView){
     // Get image count
@@ -404,6 +405,7 @@ CreateViewsForSwapChain::proc(logical_device: vk.Device, swapchain_khr: vk.Swapc
     return
 }
 
+// Setup RenderPass
 CreateRenderPass :: proc(logical_device: vk.Device, format: vk.Format) -> (renderpass: vk.RenderPass) {
     attachment_description := vk.AttachmentDescription {
         format = format,
@@ -450,6 +452,7 @@ CreateRenderPass :: proc(logical_device: vk.Device, format: vk.Format) -> (rende
     return
 }
 
+// Set up Graphics Pipeline
 CreatePipeline :: proc(logical_device: vk.Device, surface_extent: vk.Extent2D, renderpass: vk.RenderPass) -> (pipeline: vk.Pipeline, pipeline_layout: vk.PipelineLayout){
     triangle_vert_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_vert.spv", logical_device)
     defer vk.DestroyShaderModule(logical_device, triangle_vert_shader_module, nil)
@@ -560,6 +563,7 @@ CreatePipeline :: proc(logical_device: vk.Device, surface_extent: vk.Extent2D, r
     return
 }
 
+// Create framebuffers
 CreateFrameBuffers::proc(logical_device: vk.Device, renderpass: vk.RenderPass, image_views: ^[]vk.ImageView, surface_extent: vk.Extent2D) -> (framebuffers: []vk.Framebuffer){
     framebuffers = make([]vk.Framebuffer, len(image_views))
     for image_view, i in image_views {
@@ -585,6 +589,7 @@ CreateFrameBuffers::proc(logical_device: vk.Device, renderpass: vk.RenderPass, i
     return
 }
 
+ // Create command buffer
  CreateCommandBufferWithPool::proc(logical_device: vk.Device, framebuffers: []vk.Framebuffer, 
                                       family_index_graphics: u32, 
                                       surface_extent: vk.Extent2D, renderpass: vk.RenderPass, 
