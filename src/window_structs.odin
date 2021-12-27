@@ -33,15 +33,15 @@ DeviceQueues :: struct {
 SwapchainData :: struct {
     swapchain_khr: vk.SwapchainKHR,
     surface_extent: vk.Extent2D,
-    
-    images: []vk.Image, 
-    image_views: []vk.ImageView,
-    
     pipeline: vk.Pipeline, 
     pipeline_layout: vk.PipelineLayout,
-
-    framebuffers: []vk.Framebuffer,
-
-    command_buffers: []vk.CommandBuffer,
     command_pool: vk.CommandPool,
+    swapchain_buffers: SwapchainBuffers,
+}
+
+SwapchainBuffers :: struct {
+    images:             []vk.Image, 
+    image_views:        []vk.ImageView,
+    framebuffers:       []vk.Framebuffer,
+    command_buffers:    []vk.CommandBuffer,
 }

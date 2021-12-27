@@ -368,18 +368,9 @@ InitSwapchain :: proc(logical_device: vk.Device, window_handle: glfw.WindowHandl
 
 // Get images from swapchain
 // Remember to delete swapchain_images to delete allocations
-CreateViewsForSwapChain::proc(logical_device: vk.Device, swapchain_khr: vk.SwapchainKHR, format: vk.Format) -> (swapchain_images: []vk.Image, swapchain_image_views : []vk.ImageView){
-    // Get image count
-    image_count: u32
-    vk.GetSwapchainImagesKHR(logical_device, swapchain_khr, &image_count,nil)
-
-    // Allocate memmory to save images and views
-    swapchain_images_size := size_of(vk.Image)*image_count
-    swapchain_images_and_views_buffer, _ := mem.alloc_bytes(int(swapchain_images_size + size_of(vk.ImageView)*image_count))
-    swapchain_images        = mem.slice_data_cast([]vk.Image,       swapchain_images_and_views_buffer[:swapchain_images_size])
-    swapchain_image_views   = mem.slice_data_cast([]vk.ImageView,   swapchain_images_and_views_buffer[swapchain_images_size:])
-    
+CreateViewsForSwapChain::proc(logical_device: vk.Device, swapchain_khr: vk.SwapchainKHR, format: vk.Format, swapchain_images: []vk.Image, swapchain_image_views : []vk.ImageView){
     // Get images
+    image_count := u32(len(swapchain_images))
     vk.GetSwapchainImagesKHR(logical_device, swapchain_khr, &image_count, raw_data(swapchain_images))
 
     // Create views and fill swapchain_image_views
@@ -564,8 +555,7 @@ CreatePipeline :: proc(logical_device: vk.Device, surface_extent: vk.Extent2D, r
 }
 
 // Create framebuffers
-CreateFrameBuffers::proc(logical_device: vk.Device, renderpass: vk.RenderPass, image_views: ^[]vk.ImageView, surface_extent: vk.Extent2D) -> (framebuffers: []vk.Framebuffer){
-    framebuffers = make([]vk.Framebuffer, len(image_views))
+CreateFrameBuffers::proc(logical_device: vk.Device, renderpass: vk.RenderPass, image_views: ^[]vk.ImageView, surface_extent: vk.Extent2D, framebuffers: []vk.Framebuffer){
     for image_view, i in image_views {
         framebuffer_createinfo := vk.FramebufferCreateInfo {
             sType = vk.StructureType.FRAMEBUFFER_CREATE_INFO,
@@ -593,9 +583,8 @@ CreateFrameBuffers::proc(logical_device: vk.Device, renderpass: vk.RenderPass, i
  CreateCommandBufferWithPool::proc(logical_device: vk.Device, framebuffers: []vk.Framebuffer, 
                                       family_index_graphics: u32, 
                                       surface_extent: vk.Extent2D, renderpass: vk.RenderPass, 
-                                      pipeline: vk.Pipeline,
-                                     )->(command_buffers: []vk.CommandBuffer, command_pool: vk.CommandPool){
-    command_buffers = make([]vk.CommandBuffer, len(framebuffers))
+                                      pipeline: vk.Pipeline, 
+                                      command_buffers: []vk.CommandBuffer)->(command_pool: vk.CommandPool){
     command_pool_createinfo := vk.CommandPoolCreateInfo {
         sType = vk.StructureType.COMMAND_POOL_CREATE_INFO,
         queueFamilyIndex = family_index_graphics,
@@ -657,4 +646,52 @@ CreateFrameBuffers::proc(logical_device: vk.Device, renderpass: vk.RenderPass, i
     }
 
     return
+}
+
+CreateSwapchainBuffers::proc(logical_device: vk.Device, swapchain_khr: vk.SwapchainKHR) -> (swapchain_buffers: SwapchainBuffers) {
+    using swapchain_buffers
+
+    // Get image count
+    image_count: u32
+    vk.GetSwapchainImagesKHR(logical_device, swapchain_khr, &image_count,nil)
+    
+    // Allocate memmory to save images and views
+    images_size := size_of(vk.Image)*image_count
+    image_views_size := size_of(vk.ImageView)*image_count
+    framebuffers_size := size_of(vk.Framebuffer)*image_count
+    command_buffers_size := size_of(vk.CommandBuffer)*image_count
+    
+    buffer, _ := mem.alloc_bytes(int(images_size + image_views_size + framebuffers_size + command_buffers_size))
+    images          = mem.slice_data_cast([]vk.Image,         buffer[:images_size])
+    image_views     = mem.slice_data_cast([]vk.ImageView,     buffer[ images_size:images_size+image_views_size])
+    framebuffers    = mem.slice_data_cast([]vk.Framebuffer,   buffer[             images_size+image_views_size:images_size+image_views_size+framebuffers_size])
+    command_buffers = mem.slice_data_cast([]vk.CommandBuffer, buffer[                                          images_size+image_views_size+framebuffers_size:])
+    return
+}
+
+CreateSwapchain :: proc(logical_device: vk.Device, window_handle: glfw.WindowHandle, 
+                        surface_khr: vk.SurfaceKHR, surface_capabilities: vk.SurfaceCapabilitiesKHR, surface_device: ^SurfaceDevice, 
+                        renderpass: vk.RenderPass, swapchain_buffers: SwapchainBuffers) -> (swapchain_data: SwapchainData) {
+    using swapchain_data
+    using swapchain_data.swapchain_buffers
+    swapchain_khr, surface_extent = InitSwapchain(logical_device, window_handle, surface_khr, surface_capabilities, surface_device)
+    if len(swapchain_buffers.images) == 0 {swapchain_buffers = CreateSwapchainBuffers(logical_device, swapchain_khr)}
+    CreateViewsForSwapChain(logical_device, swapchain_khr, surface_device.surface_format.format, images, image_views)
+    pipeline, pipeline_layout = CreatePipeline(logical_device, surface_extent, renderpass)
+    CreateFrameBuffers(logical_device, renderpass, &image_views, surface_extent, swapchain_buffers.framebuffers)
+    command_pool = CreateCommandBufferWithPool(logical_device, framebuffers, surface_device.family_index_graphics, surface_extent, renderpass, pipeline, command_buffers)
+    return
+}
+    
+DestroySwapchain::proc(logical_device: vk.Device, using swapchain_data: SwapchainData) {
+    vk.DestroyCommandPool(logical_device, command_pool, nil)
+    for framebuffer in swapchain_buffers.framebuffers {
+        vk.DestroyFramebuffer(logical_device, framebuffer, nil)
+    }
+    vk.DestroyPipeline(logical_device, pipeline, nil)
+    vk.DestroyPipelineLayout(logical_device, pipeline_layout, nil)
+    for image_view in swapchain_buffers.image_views {
+        vk.DestroyImageView(logical_device, image_view, nil)
+    }
+    vk.DestroySwapchainKHR(logical_device, swapchain_khr, nil)
 }

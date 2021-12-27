@@ -117,34 +117,8 @@ main::proc()
     vk.GetDeviceQueue(application_state.logical_device, surface_device.family_index_presentation, 0, &device_queues.presentation)
     
     // Create swapchain
-    application_state.swapchain_data = CreateSwapchain(logical_device, window_handle, surface_khr, surface_capabilities, &surface_device, renderpass_default)
-    CreateSwapchain :: proc(logical_device: vk.Device, window_handle: glfw.WindowHandle, 
-                            surface_khr: vk.SurfaceKHR, surface_capabilities: vk.SurfaceCapabilitiesKHR, surface_device: ^SurfaceDevice, 
-                            renderpass: vk.RenderPass) -> (swapchain_data: SwapchainData) {
-        using swapchain_data
-        swapchain_khr, surface_extent = InitSwapchain(logical_device, window_handle, surface_khr, surface_capabilities, surface_device)
-        images, image_views = CreateViewsForSwapChain(logical_device, swapchain_khr, surface_device.surface_format.format)
-        pipeline, pipeline_layout = CreatePipeline(logical_device, surface_extent, renderpass)
-        framebuffers = CreateFrameBuffers(logical_device, renderpass, &image_views, surface_extent)
-        command_buffers, command_pool = CreateCommandBufferWithPool(logical_device, framebuffers, surface_device.family_index_graphics, surface_extent, renderpass, pipeline)
-        return
-    }
-    
-    DestroySwapchain::proc(logical_device: vk.Device, using swapchain_data: SwapchainData) {
-        vk.DestroyCommandPool(logical_device, command_pool, nil)
-        for framebuffer in framebuffers {
-            vk.DestroyFramebuffer(logical_device, framebuffer, nil)
-        }
-        vk.DestroyPipeline(logical_device, pipeline, nil)
-        vk.DestroyPipelineLayout(logical_device, pipeline_layout, nil)
-        for image_view in image_views {
-            vk.DestroyImageView(logical_device, image_view, nil)
-        }
-        vk.DestroySwapchainKHR(logical_device, swapchain_khr, nil)
-    }
-    defer delete(framebuffers)
-    defer delete(command_buffers)
-    defer delete(images)
+    application_state.swapchain_data = CreateSwapchain(logical_device, window_handle, surface_khr, surface_capabilities, &surface_device, renderpass_default, application_state.swapchain_data.swapchain_buffers)
+    defer delete(swapchain_buffers.images)
     defer DestroySwapchain(application_state.logical_device, application_state.swapchain_data)
     
     // Create semaphores and fences
@@ -192,7 +166,7 @@ main::proc()
         glfw.PollEvents();
 
         // Draw frame
-        DrawFrame(application_state.logical_device, &current_bucket_index, &frame_sync_handles, &swapchain_khr, device_queues, &application_state.command_buffers)
+        DrawFrame(application_state.logical_device, &current_bucket_index, &frame_sync_handles, &swapchain_khr, device_queues, &swapchain_buffers.command_buffers)
 
         DrawFrame::proc(logical_device: vk.Device, current_bucket_index: ^u8, frame_sync_handles: ^FrameSyncHandles, swapchain_khr: ^vk.SwapchainKHR, device_queues: DeviceQueues, command_buffers: ^[]vk.CommandBuffer) {
             // Wait till bucket is ready
