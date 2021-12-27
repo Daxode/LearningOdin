@@ -64,6 +64,92 @@ CheckVulkanInstanceExistence :: proc() -> (exists: VulkanInstanceExists) {
     return
 }
 
+// Vulkan instance exits can be nil in release, Remember to destroy instance, and debugmessenger in debugmode
+CreateVulkanInstanceWithDebugMSG :: proc(application_info: ^vk.ApplicationInfo, exists: ^VulkanInstanceExists) -> (instance: vk.Instance, debugMessengerEXT: vk.DebugUtilsMessengerEXT) {
+    instance_createinfo := vk.InstanceCreateInfo{
+        sType = vk.StructureType.INSTANCE_CREATE_INFO,
+        pApplicationInfo = application_info,
+    }
+    
+    when ODIN_DEBUG {
+        if exists.exists_vk_layer_khr_validation {
+            instance_createinfo.enabledLayerCount = 1
+            layerKHRVal : cstring = "VK_LAYER_KHRONOS_validation"
+            instance_createinfo.ppEnabledLayerNames = &layerKHRVal
+        }
+    }
+
+    required_instance_extensions := glfw.GetRequiredInstanceExtensions();
+    when ODIN_DEBUG {
+        enabled_extensions: []cstring
+        defer if exists.exists_vk_ext_debug_utils{delete(enabled_extensions, context.temp_allocator)} 
+        // Append VK_EXT_debug_utils to list of required_instance_extensions
+        if exists.exists_vk_ext_debug_utils {
+            enabled_extensions := make([]cstring, len(required_instance_extensions)+1, context.temp_allocator)
+            copy(enabled_extensions[:], required_instance_extensions[:])
+            enabled_extensions[len(enabled_extensions)-1] = "VK_EXT_debug_utils"
+            instance_createinfo.ppEnabledExtensionNames = raw_data(enabled_extensions);
+            instance_createinfo.enabledExtensionCount = u32(len(enabled_extensions));
+        } else {
+            instance_createinfo.ppEnabledExtensionNames = raw_data(required_instance_extensions);
+            instance_createinfo.enabledExtensionCount = u32(len(required_instance_extensions));
+        }
+    } else {
+        instance_createinfo.ppEnabledExtensionNames = raw_data(required_instance_extensions);
+        instance_createinfo.enabledExtensionCount = u32(len(required_instance_extensions));
+    }
+
+    // Create Debugger
+    when ODIN_DEBUG {
+        debug_createinfo: vk.DebugUtilsMessengerCreateInfoEXT
+        if exists.exists_vk_ext_debug_utils {
+            debug_createinfo = {
+                sType = vk.StructureType.DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+                messageSeverity = {.VERBOSE, .INFO, .WARNING, .ERROR},
+                messageType = {.GENERAL, .VALIDATION, .PERFORMANCE},
+                pfnUserCallback = vk.ProcDebugUtilsMessengerCallbackEXT(proc(
+                    msgSeverity: vk.DebugUtilsMessageSeverityFlagsEXT, msgTypes: vk.DebugUtilsMessageTypeFlagsEXT, 
+                    pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT, pUserData: rawptr) {
+                        severityString := ""
+                        if .VERBOSE in msgSeverity {
+                            severityString = "VK[V]:"
+                        } else if .INFO in msgSeverity {
+                            severityString = "VK[I]:"
+                        } else if .WARNING in msgSeverity {
+                            severityString = "VK[W]:"
+                        } else if .ERROR in msgSeverity {
+                            severityString = "VK[E]:"
+                        }
+
+                        fmt.println(severityString, pCallbackData^.pMessage)
+                    }),
+            }
+            instance_createinfo.pNext = &debug_createinfo
+        }
+    }
+
+    // Create instance
+    result_create_instance := vk.CreateInstance(&instance_createinfo, nil, &instance)
+    when ODIN_DEBUG { 
+        if (result_create_instance != vk.Result.SUCCESS) {
+            panic("Creating Vulkan instance failed");
+        }
+    }
+
+    when ODIN_DEBUG {
+        if exists.exists_vk_ext_debug_utils {
+            CreateDebugUtilsMessengerEXT := vk.ProcCreateDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
+            if (CreateDebugUtilsMessengerEXT != nil) {
+                CreateDebugUtilsMessengerEXT(instance, &debug_createinfo, nil, &debugMessengerEXT)
+            } else {
+                fmt.println("vkCreateDebugUtilsMessengerEXT not found");
+            }
+        }
+    }
+
+    return
+}
+
 GetOptimalSurfaceDevice::proc(app_instance: vk.Instance, surface_khr: vk.SurfaceKHR) -> (surface_device: SurfaceDevice) {
     // Retrieve Physical Devices
     deviceCount : u32 = 0;
