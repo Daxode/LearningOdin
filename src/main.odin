@@ -32,10 +32,14 @@ load_vulkan_function_pointers::proc()
     });
 }
 
-WindowState :: struct { // Use for state not for argument passing with callback
+ApplicationState :: struct { // Use for state not for argument passing with callback
     window_handle: glfw.WindowHandle,
-    logical_device: vk.Device,
+    
     app_instance: vk.Instance,
+    logical_device: vk.Device,
+    using swapchain_data: SwapchainData,
+
+    device_queues: DeviceQueues,
     using exists_in_instance: VulkanInstanceExists, // Only filled in debug
 }
 
@@ -47,21 +51,21 @@ main::proc()
         fmt.println("debug enabled")
     }
 
-    window_state: WindowState
-    using window_state
+    application_state: ApplicationState
+    using application_state
 
     // Init glfw
     glfw.Init();
     defer glfw.Terminate();
     
     // Create GLFW Window
-    window_state.window_handle = CreateWindowWithCallbacksAndIcon()
-    defer glfw.DestroyWindow(window_state.window_handle)
-    glfw.SetWindowUserPointer(window_state.window_handle, &window_state)
+    application_state.window_handle = CreateWindowWithCallbacksAndIcon()
+    defer glfw.DestroyWindow(application_state.window_handle)
+    glfw.SetWindowUserPointer(application_state.window_handle, &application_state)
 
     // Check validation layers and for VK_EXT_debug_utils
     when ODIN_DEBUG {
-        window_state.exists_in_instance = CheckVulkanInstanceExistence()
+        application_state.exists_in_instance = CheckVulkanInstanceExistence()
     }
 
     // Create App Info
@@ -76,12 +80,12 @@ main::proc()
 
     // Create Instance and External Debug Messenger
     debugMessengerEXT: vk.DebugUtilsMessengerEXT
-    window_state.app_instance, debugMessengerEXT = CreateVulkanInstanceWithDebugMSG(&appplication_info, &window_state.exists_in_instance)
-    defer vk.DestroyInstance(window_state.app_instance, nil)
+    application_state.app_instance, debugMessengerEXT = CreateVulkanInstanceWithDebugMSG(&appplication_info, &application_state.exists_in_instance)
+    defer vk.DestroyInstance(application_state.app_instance, nil)
     defer when ODIN_DEBUG {
-        DestroyDebugUtilsMessengerEXT := vk.ProcDestroyDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(window_state.app_instance, "vkDestroyDebugUtilsMessengerEXT"));
+        DestroyDebugUtilsMessengerEXT := vk.ProcDestroyDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(application_state.app_instance, "vkDestroyDebugUtilsMessengerEXT"));
         if (DestroyDebugUtilsMessengerEXT != nil) {
-            DestroyDebugUtilsMessengerEXT(window_state.app_instance, debugMessengerEXT, nil);
+            DestroyDebugUtilsMessengerEXT(application_state.app_instance, debugMessengerEXT, nil);
         }
     }
 
@@ -89,7 +93,7 @@ main::proc()
     surface_khr : vk.SurfaceKHR
     defer vk.DestroySurfaceKHR(app_instance, surface_khr, nil)
     {
-        resultCreateWindowSurface := glfw.CreateWindowSurface(app_instance, window_state.window_handle, nil, &surface_khr)
+        resultCreateWindowSurface := glfw.CreateWindowSurface(app_instance, application_state.window_handle, nil, &surface_khr)
         when ODIN_DEBUG { 
             if (resultCreateWindowSurface != vk.Result.SUCCESS) {
                 panic("Creating window surface failed")
@@ -101,62 +105,61 @@ main::proc()
     surface_device := GetOptimalSurfaceDevice(app_instance, surface_khr)
     
     // Create Logical Device
-    window_state.logical_device = CreateDevice(surface_device, window_state.exists_vk_layer_khr_validation)
-    defer vk.DestroyDevice(window_state.logical_device, nil)
+    application_state.logical_device = CreateDevice(surface_device, application_state.exists_vk_layer_khr_validation)
+    defer vk.DestroyDevice(application_state.logical_device, nil)
     
     // Get Queues
-    device_queues: DeviceQueues = ---
     {
-        vk.GetDeviceQueue(window_state.logical_device, surface_device.family_index_graphics, 0, &device_queues.graphics)
-        vk.GetDeviceQueue(window_state.logical_device, surface_device.family_index_presentation, 0, &device_queues.presentation)
+        vk.GetDeviceQueue(application_state.logical_device, surface_device.family_index_graphics, 0, &device_queues.graphics)
+        vk.GetDeviceQueue(application_state.logical_device, surface_device.family_index_presentation, 0, &device_queues.presentation)
     }
 
     // Create swapchain
     surface_capabilities: vk.SurfaceCapabilitiesKHR
     vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(surface_device.device_picked, surface_khr, &surface_capabilities)
     
-    swapchain_khr, surface_extent := InitSwapchain(window_state.logical_device, window_state.window_handle, surface_khr, surface_capabilities, &surface_device)
-    defer vk.DestroySwapchainKHR(window_state.logical_device, swapchain_khr, nil)
+    surface_extent: vk.Extent2D
+    application_state.swapchain_khr, surface_extent = InitSwapchain(application_state.logical_device, application_state.window_handle, surface_khr, surface_capabilities, &surface_device)
+    defer vk.DestroySwapchainKHR(application_state.logical_device, application_state.swapchain_khr, nil)
     
 
     // Get images from swapchain
-    swapchain_images, swapchain_image_views := CreateViewsForSwapChain(window_state.logical_device, swapchain_khr, surface_device.surface_format.format)
+    swapchain_images, swapchain_image_views := CreateViewsForSwapChain(application_state.logical_device, swapchain_khr, surface_device.surface_format.format)
     defer delete(swapchain_images)
     defer for image_view in swapchain_image_views {
-        vk.DestroyImageView(window_state.logical_device, image_view, nil)
+        vk.DestroyImageView(application_state.logical_device, image_view, nil)
     }
 
     // Setup RenderPass
-    renderpass := CreateRenderPass(window_state.logical_device, surface_device.surface_format.format)
+    renderpass := CreateRenderPass(application_state.logical_device, surface_device.surface_format.format)
     defer vk.DestroyRenderPass(logical_device, renderpass, nil)
 
     // Set up Graphics Pipeline
-    pipeline, pipeline_layout := CreatePipeline(window_state.logical_device, surface_extent, renderpass)
-    defer vk.DestroyPipelineLayout(window_state.logical_device, pipeline_layout, nil)
-    defer vk.DestroyPipeline(window_state.logical_device, pipeline, nil)
+    pipeline, pipeline_layout = CreatePipeline(application_state.logical_device, surface_extent, renderpass)
+    defer vk.DestroyPipelineLayout(application_state.logical_device, pipeline_layout, nil)
+    defer vk.DestroyPipeline(application_state.logical_device, pipeline, nil)
 
     // Create framebuffers
-    framebuffers := CreateFrameBuffers(window_state.logical_device, renderpass, &swapchain_image_views, surface_extent)
-    defer delete(framebuffers)
-    defer for framebuffer in framebuffers {
-        vk.DestroyFramebuffer(window_state.logical_device, framebuffer, nil)
+    application_state.framebuffers = CreateFrameBuffers(application_state.logical_device, renderpass, &swapchain_image_views, surface_extent)
+    defer delete(application_state.framebuffers)
+    defer for framebuffer in application_state.framebuffers {
+        vk.DestroyFramebuffer(application_state.logical_device, framebuffer, nil)
     }
 
     // Create command buffer
-    command_buffers, command_pool := CreateCommandBufferWithPool(logical_device, framebuffers, surface_device.family_index_graphics, surface_extent, renderpass, pipeline)
-    defer vk.DestroyCommandPool(window_state.logical_device, command_pool, nil)
-    defer delete(command_buffers)
+    application_state.command_buffers, application_state.command_pool = CreateCommandBufferWithPool(logical_device, framebuffers, surface_device.family_index_graphics, surface_extent, renderpass, pipeline)
+    defer vk.DestroyCommandPool(application_state.logical_device, application_state.command_pool, nil)
+    defer delete(application_state.command_buffers)
 
     // Create semaphores and fences
-    
-    frame_sync_handles := CreateFrameSyncHandles(window_state.logical_device)
-     
+    frame_sync_handles := CreateFrameSyncHandles(application_state.logical_device) 
     defer for i in 0..<FRAME_IN_Q_MAX {
-        vk.WaitForFences(window_state.logical_device, 1, &frame_sync_handles.fences_from_bucket_index[i],false, c.UINT64_MAX)
-        vk.DestroySemaphore(window_state.logical_device,frame_sync_handles.semaphores_image_available[i],nil)
-        vk.DestroySemaphore(window_state.logical_device,frame_sync_handles.semaphores_render_finished[i],nil)
-        vk.DestroyFence(window_state.logical_device,frame_sync_handles.fences_from_bucket_index[i],nil)
+        vk.WaitForFences(application_state.logical_device, 1, &frame_sync_handles.fences_from_bucket_index[i],false, c.UINT64_MAX)
+        vk.DestroySemaphore(application_state.logical_device,frame_sync_handles.semaphores_image_available[i],nil)
+        vk.DestroySemaphore(application_state.logical_device,frame_sync_handles.semaphores_render_finished[i],nil)
+        vk.DestroyFence(application_state.logical_device,frame_sync_handles.fences_from_bucket_index[i],nil)
     }
+
     CreateFrameSyncHandles::proc(logical_device: vk.Device)->(frame_sync_handles: FrameSyncHandles){
         semaphore_createinfo := vk.SemaphoreCreateInfo{sType= vk.StructureType.SEMAPHORE_CREATE_INFO}
         fence_createinfo := vk.FenceCreateInfo{sType= vk.StructureType.FENCE_CREATE_INFO,flags={.SIGNALED}}
@@ -187,13 +190,14 @@ main::proc()
 
     current_bucket_index:u8 = 0
     // Main loop
-    for !glfw.WindowShouldClose(window_state.window_handle) {
+    for !glfw.WindowShouldClose(application_state.window_handle) {
         time_frame_current = time.tick_now()
         time_delta = time.duration_seconds(time.tick_diff(time_frame_last, time_frame_current))
         glfw.PollEvents();
 
         // Draw frame
-        DrawFrame(window_state.logical_device, &current_bucket_index, &frame_sync_handles, &swapchain_khr, device_queues, &command_buffers)
+        DrawFrame(application_state.logical_device, &current_bucket_index, &frame_sync_handles, &swapchain_khr, device_queues, &application_state.command_buffers)
+
         DrawFrame::proc(logical_device: vk.Device, current_bucket_index: ^u8, frame_sync_handles: ^FrameSyncHandles, swapchain_khr: ^vk.SwapchainKHR, device_queues: DeviceQueues, command_buffers: ^[]vk.CommandBuffer) {
             // Wait till bucket is ready
             vk.WaitForFences(logical_device, 1, &frame_sync_handles.fences_from_bucket_index[current_bucket_index^], false, c.UINT64_MAX)

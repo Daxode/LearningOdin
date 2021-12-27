@@ -29,3 +29,15 @@ FrameSyncHandles :: struct {
 DeviceQueues :: struct {
     graphics, presentation: vk.Queue,
 }
+
+SwapchainData :: struct {
+    swapchain_khr: vk.SwapchainKHR,
+    
+    pipeline: vk.Pipeline, 
+    pipeline_layout: vk.PipelineLayout,
+
+    framebuffers: []vk.Framebuffer,
+
+    command_buffers: []vk.CommandBuffer,
+    command_pool: vk.CommandPool,
+}

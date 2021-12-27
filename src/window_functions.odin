@@ -24,9 +24,9 @@ CreateWindowWithCallbacksAndIcon::proc() -> (window_handle: glfw.WindowHandle){
     }))
 
     glfw.SetFramebufferSizeCallback(window_handle, glfw.FramebufferSizeProc(proc(window_handle: glfw.WindowHandle, width, height: c.int){
-        window_state := (^WindowState)(glfw.GetWindowUserPointer(window_handle))^
+        application_state := (^ApplicationState)(glfw.GetWindowUserPointer(window_handle))^
         fmt.println("Frame buffer size changed")
-        vk.DeviceWaitIdle(window_state.logical_device)
+        vk.DeviceWaitIdle(application_state.logical_device)
     }))
     
     w, h, channels: c.int
