@@ -32,7 +32,6 @@ load_vulkan_function_pointers::proc()
     });
 }
 
-FRAME_IN_Q_MAX : u8 : 6
 WindowState :: struct { // Use for state not for argument passing with callback
     window_handle: glfw.WindowHandle,
     logical_device: vk.Device,
@@ -106,11 +105,10 @@ main::proc()
     defer vk.DestroyDevice(window_state.logical_device, nil)
     
     // Get Queues
-    queue_graphics: vk.Queue
-    queue_presentation: vk.Queue
+    device_queues: DeviceQueues = ---
     {
-        vk.GetDeviceQueue(window_state.logical_device, surface_device.family_index_graphics, 0, &queue_graphics)
-        vk.GetDeviceQueue(window_state.logical_device, surface_device.family_index_presentation, 0, &queue_presentation)
+        vk.GetDeviceQueue(window_state.logical_device, surface_device.family_index_graphics, 0, &device_queues.graphics)
+        vk.GetDeviceQueue(window_state.logical_device, surface_device.family_index_presentation, 0, &device_queues.presentation)
     }
 
     // Create swapchain
@@ -150,36 +148,36 @@ main::proc()
     defer delete(command_buffers)
 
     // Create semaphores and fences
-    semaphores_image_available: [FRAME_IN_Q_MAX]vk.Semaphore
-    semaphores_render_finished: [FRAME_IN_Q_MAX]vk.Semaphore
-    fences_from_bucket_index: [FRAME_IN_Q_MAX]vk.Fence
-    fences_from_image_index:  [FRAME_IN_Q_MAX]vk.Fence // Borrow of fences_from_bucket_index
+    
+    frame_sync_handles := CreateFrameSyncHandles(window_state.logical_device)
+     
     defer for i in 0..<FRAME_IN_Q_MAX {
-        vk.WaitForFences(window_state.logical_device, 1, &fences_from_bucket_index[i],false, c.UINT64_MAX)
-        vk.DestroySemaphore(window_state.logical_device,semaphores_image_available[i],nil)
-        vk.DestroySemaphore(window_state.logical_device,semaphores_render_finished[i],nil)
-        vk.DestroyFence(window_state.logical_device,fences_from_bucket_index[i],nil)
+        vk.WaitForFences(window_state.logical_device, 1, &frame_sync_handles.fences_from_bucket_index[i],false, c.UINT64_MAX)
+        vk.DestroySemaphore(window_state.logical_device,frame_sync_handles.semaphores_image_available[i],nil)
+        vk.DestroySemaphore(window_state.logical_device,frame_sync_handles.semaphores_render_finished[i],nil)
+        vk.DestroyFence(window_state.logical_device,frame_sync_handles.fences_from_bucket_index[i],nil)
     }
-    {
+    CreateFrameSyncHandles::proc(logical_device: vk.Device)->(frame_sync_handles: FrameSyncHandles){
         semaphore_createinfo := vk.SemaphoreCreateInfo{sType= vk.StructureType.SEMAPHORE_CREATE_INFO}
         fence_createinfo := vk.FenceCreateInfo{sType= vk.StructureType.FENCE_CREATE_INFO,flags={.SIGNALED}}
 
         for i in 0..<FRAME_IN_Q_MAX {
-            result_semaphore_image_available := vk.CreateSemaphore(window_state.logical_device, &semaphore_createinfo, nil, &semaphores_image_available[i])
-            result_semaphore_render_finished := vk.CreateSemaphore(window_state.logical_device, &semaphore_createinfo, nil, &semaphores_render_finished[i])
+            result_semaphore_image_available := vk.CreateSemaphore(logical_device, &semaphore_createinfo, nil, &frame_sync_handles.semaphores_image_available[i])
+            result_semaphore_render_finished := vk.CreateSemaphore(logical_device, &semaphore_createinfo, nil, &frame_sync_handles.semaphores_render_finished[i])
             when ODIN_DEBUG {
                 if (result_semaphore_image_available != vk.Result.SUCCESS || result_semaphore_render_finished != vk.Result.SUCCESS) {
                     panic("Creating semaphores failed")
                 }
             }
 
-            result_fence_from_bucket_index := vk.CreateFence(window_state.logical_device, &fence_createinfo, nil, &fences_from_bucket_index[i])
+            result_fence_from_bucket_index := vk.CreateFence(logical_device, &fence_createinfo, nil, &frame_sync_handles.fences_from_bucket_index[i])
             when ODIN_DEBUG {
                 if (result_fence_from_bucket_index != vk.Result.SUCCESS) {
                     panic("Creating fence failed")
                 }
             }
         }
+        return
     }
 
     time_start := time.tick_now()
@@ -195,54 +193,55 @@ main::proc()
         glfw.PollEvents();
 
         // Draw frame
-        {
+        DrawFrame(window_state.logical_device, &current_bucket_index, &frame_sync_handles, &swapchain_khr, device_queues, &command_buffers)
+        DrawFrame::proc(logical_device: vk.Device, current_bucket_index: ^u8, frame_sync_handles: ^FrameSyncHandles, swapchain_khr: ^vk.SwapchainKHR, device_queues: DeviceQueues, command_buffers: ^[]vk.CommandBuffer) {
             // Wait till bucket is ready
-            vk.WaitForFences(window_state.logical_device, 1, &fences_from_bucket_index[current_bucket_index], false, c.UINT64_MAX)
-            vk.ResetFences(window_state.logical_device, 1, &fences_from_bucket_index[current_bucket_index])
+            vk.WaitForFences(logical_device, 1, &frame_sync_handles.fences_from_bucket_index[current_bucket_index^], false, c.UINT64_MAX)
+            vk.ResetFences(logical_device, 1, &frame_sync_handles.fences_from_bucket_index[current_bucket_index^])
 
             // Acquire image to draw
             image_index: u32
-            result_acquire_next_image := vk.AcquireNextImageKHR(window_state.logical_device, swapchain_khr, c.UINT64_MAX, semaphores_image_available[current_bucket_index], 0, &image_index)
+            result_acquire_next_image := vk.AcquireNextImageKHR(logical_device, swapchain_khr^, c.UINT64_MAX, frame_sync_handles.semaphores_image_available[current_bucket_index^], 0, &image_index)
             when ODIN_DEBUG {if result_acquire_next_image!= vk.Result.SUCCESS{fmt.println("Couldn't acquire next image: ", result_acquire_next_image)}}
             // Submit the command to draw
             wait_mask := vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT}
             submit_info := vk.SubmitInfo {
                 sType = vk.StructureType.SUBMIT_INFO,
                 waitSemaphoreCount = 1,
-                pWaitSemaphores = &semaphores_image_available[current_bucket_index],
+                pWaitSemaphores = &frame_sync_handles.semaphores_image_available[current_bucket_index^],
                 pWaitDstStageMask = &wait_mask,
                 commandBufferCount = 1,
                 pCommandBuffers = &command_buffers[image_index],
                 signalSemaphoreCount = 1,
-                pSignalSemaphores = &semaphores_render_finished[current_bucket_index],
+                pSignalSemaphores = &frame_sync_handles.semaphores_render_finished[current_bucket_index^],
             }
 
             // Make sure to wait with submitting a queue for an image who's already in flight
-            if fences_from_image_index[image_index] != 0 {
-                vk.WaitForFences(window_state.logical_device, 1, &fences_from_image_index[image_index], false, c.UINT64_MAX)
+            if frame_sync_handles.fences_from_image_index[image_index] != 0 {
+                vk.WaitForFences(logical_device, 1, &frame_sync_handles.fences_from_image_index[image_index], false, c.UINT64_MAX)
             }
             
-            result_queue_submit := vk.QueueSubmit(queue_graphics, 1, &submit_info, fences_from_bucket_index[current_bucket_index])
+            result_queue_submit := vk.QueueSubmit(device_queues.graphics, 1, &submit_info, frame_sync_handles.fences_from_bucket_index[current_bucket_index^])
             when ODIN_DEBUG {
                 if result_queue_submit != vk.Result.SUCCESS {
                     panic("Submitting queue failed")
                 }
             }
-            fences_from_image_index[image_index] = fences_from_bucket_index[current_bucket_index]
+            frame_sync_handles.fences_from_image_index[image_index] = frame_sync_handles.fences_from_bucket_index[current_bucket_index^]
     
             // Present Result
             present_info := vk.PresentInfoKHR {
                 sType = vk.StructureType.PRESENT_INFO_KHR,
                 waitSemaphoreCount = 1,
-                pWaitSemaphores = &semaphores_render_finished[current_bucket_index],
+                pWaitSemaphores = &frame_sync_handles.semaphores_render_finished[current_bucket_index^],
                 swapchainCount = 1,
-                pSwapchains = &swapchain_khr,
+                pSwapchains = swapchain_khr,
                 pImageIndices = &image_index,
             }
-            result_queue_present_khr := vk.QueuePresentKHR(queue_presentation, &present_info)
+            result_queue_present_khr := vk.QueuePresentKHR(device_queues.presentation, &present_info)
             when ODIN_DEBUG {if result_queue_present_khr!= vk.Result.SUCCESS{fmt.println("Couldn't queue for presentation: ", result_queue_present_khr)}}
 
-            current_bucket_index = (current_bucket_index+1)%FRAME_IN_Q_MAX
+            current_bucket_index^ = (current_bucket_index^+1)%FRAME_IN_Q_MAX
         }
 
         // After frame update

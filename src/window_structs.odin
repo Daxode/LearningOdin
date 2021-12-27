@@ -17,3 +17,15 @@ SurfaceDevice :: struct {
     surface_format: vk.SurfaceFormatKHR,
     family_index_graphics, family_index_presentation: u32,
 }
+
+FRAME_IN_Q_MAX : u8 : 6
+FrameSyncHandles :: struct {
+    semaphores_image_available: [FRAME_IN_Q_MAX]vk.Semaphore,
+    semaphores_render_finished: [FRAME_IN_Q_MAX]vk.Semaphore,
+    fences_from_bucket_index: [FRAME_IN_Q_MAX]vk.Fence,
+    fences_from_image_index:  [FRAME_IN_Q_MAX]vk.Fence, // Borrow of fences_from_bucket_index
+}
+
+DeviceQueues :: struct {
+    graphics, presentation: vk.Queue,
+}
