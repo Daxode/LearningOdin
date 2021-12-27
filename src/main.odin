@@ -38,6 +38,8 @@ ApplicationState :: struct { // Use for state not for argument passing with call
     app_instance: vk.Instance,
     logical_device: vk.Device,
     using swapchain_data: SwapchainData,
+    surface_capabilities: vk.SurfaceCapabilitiesKHR,
+    renderpass: vk.RenderPass,
 
     device_queues: DeviceQueues,
     using exists_in_instance: VulkanInstanceExists, // Only filled in debug
@@ -103,54 +105,45 @@ main::proc()
 
     // Pick the physical device
     surface_device := GetOptimalSurfaceDevice(app_instance, surface_khr)
-    
-    // Create Logical Device
+    vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(surface_device.device_picked, surface_khr, &surface_capabilities)
     application_state.logical_device = CreateDevice(surface_device, application_state.exists_vk_layer_khr_validation)
+    renderpass = CreateRenderPass(logical_device, surface_device.surface_format.format)
+    defer vk.DestroyRenderPass(logical_device, renderpass, nil)
     defer vk.DestroyDevice(application_state.logical_device, nil)
     
     // Get Queues
-    {
-        vk.GetDeviceQueue(application_state.logical_device, surface_device.family_index_graphics, 0, &device_queues.graphics)
-        vk.GetDeviceQueue(application_state.logical_device, surface_device.family_index_presentation, 0, &device_queues.presentation)
-    }
-
+    vk.GetDeviceQueue(application_state.logical_device, surface_device.family_index_graphics, 0, &device_queues.graphics)
+    vk.GetDeviceQueue(application_state.logical_device, surface_device.family_index_presentation, 0, &device_queues.presentation)
+    
     // Create swapchain
-    surface_capabilities: vk.SurfaceCapabilitiesKHR
-    vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(surface_device.device_picked, surface_khr, &surface_capabilities)
-    
-    surface_extent: vk.Extent2D
-    application_state.swapchain_khr, surface_extent = InitSwapchain(application_state.logical_device, application_state.window_handle, surface_khr, surface_capabilities, &surface_device)
-    defer vk.DestroySwapchainKHR(application_state.logical_device, application_state.swapchain_khr, nil)
-    
-
-    // Get images from swapchain
-    swapchain_images, swapchain_image_views := CreateViewsForSwapChain(application_state.logical_device, swapchain_khr, surface_device.surface_format.format)
-    defer delete(swapchain_images)
-    defer for image_view in swapchain_image_views {
-        vk.DestroyImageView(application_state.logical_device, image_view, nil)
+    application_state.swapchain_data = CreateSwapchain(logical_device, window_handle, surface_khr, surface_capabilities, &surface_device, renderpass)
+    CreateSwapchain :: proc(logical_device: vk.Device, window_handle: glfw.WindowHandle, surface_khr: vk.SurfaceKHR, surface_capabilities: vk.SurfaceCapabilitiesKHR, surface_device: ^SurfaceDevice, renderpass: vk.RenderPass) -> (swapchain_data: SwapchainData) {
+        using swapchain_data
+        swapchain_khr, surface_extent = InitSwapchain(logical_device, window_handle, surface_khr, surface_capabilities, surface_device)
+        images, image_views = CreateViewsForSwapChain(logical_device, swapchain_khr, surface_device.surface_format.format)
+        pipeline, pipeline_layout = CreatePipeline(logical_device, surface_extent, renderpass)
+        framebuffers = CreateFrameBuffers(logical_device, renderpass, &image_views, surface_extent)
+        command_buffers, command_pool = CreateCommandBufferWithPool(logical_device, framebuffers, surface_device.family_index_graphics, surface_extent, renderpass, pipeline)
+        return
     }
-
-    // Setup RenderPass
-    renderpass := CreateRenderPass(application_state.logical_device, surface_device.surface_format.format)
-    defer vk.DestroyRenderPass(logical_device, renderpass, nil)
-
-    // Set up Graphics Pipeline
-    pipeline, pipeline_layout = CreatePipeline(application_state.logical_device, surface_extent, renderpass)
-    defer vk.DestroyPipelineLayout(application_state.logical_device, pipeline_layout, nil)
-    defer vk.DestroyPipeline(application_state.logical_device, pipeline, nil)
-
-    // Create framebuffers
-    application_state.framebuffers = CreateFrameBuffers(application_state.logical_device, renderpass, &swapchain_image_views, surface_extent)
-    defer delete(application_state.framebuffers)
-    defer for framebuffer in application_state.framebuffers {
-        vk.DestroyFramebuffer(application_state.logical_device, framebuffer, nil)
+    
+    defer DestroySwapchain(application_state.logical_device, application_state.swapchain_data)
+    DestroySwapchain::proc(logical_device: vk.Device, using swapchain_data: SwapchainData) {
+        vk.DestroyCommandPool(logical_device, command_pool, nil)
+        for framebuffer in framebuffers {
+            vk.DestroyFramebuffer(logical_device, framebuffer, nil)
+        }
+        vk.DestroyPipeline(logical_device, pipeline, nil)
+        vk.DestroyPipelineLayout(logical_device, pipeline_layout, nil)
+        for image_view in image_views {
+            vk.DestroyImageView(logical_device, image_view, nil)
+        }
+        vk.DestroySwapchainKHR(logical_device, swapchain_khr, nil)
     }
-
-    // Create command buffer
-    application_state.command_buffers, application_state.command_pool = CreateCommandBufferWithPool(logical_device, framebuffers, surface_device.family_index_graphics, surface_extent, renderpass, pipeline)
-    defer vk.DestroyCommandPool(application_state.logical_device, application_state.command_pool, nil)
-    defer delete(application_state.command_buffers)
-
+    defer delete(framebuffers)
+    defer delete(command_buffers)
+    defer delete(images)
+    
     // Create semaphores and fences
     frame_sync_handles := CreateFrameSyncHandles(application_state.logical_device) 
     defer for i in 0..<FRAME_IN_Q_MAX {
