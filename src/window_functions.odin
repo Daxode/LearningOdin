@@ -319,3 +319,337 @@ CreateDevice::proc(surface_device: SurfaceDevice, exists_vk_layer_khr_validation
     }
     return
 }
+
+////////////////////////////////////////// Everything Below is To help recreate the swapchain //////////////////////////////////////////
+
+InitSwapchain :: proc(logical_device: vk.Device, window_handle: glfw.WindowHandle, 
+                          surface_khr: vk.SurfaceKHR, surface_capabilities: vk.SurfaceCapabilitiesKHR, surface_device: ^SurfaceDevice,
+                          ) -> (swapchain_khr: vk.SwapchainKHR, surface_extent: vk.Extent2D) {
+    surface_extent = surface_capabilities.currentExtent
+    if (surface_extent.width == c.UINT32_MAX) {
+        window_frame_width, window_frame_height := glfw.GetFramebufferSize(window_handle)
+        surface_extent = {
+            clamp(u32(window_frame_width), surface_capabilities.minImageExtent.width,  surface_capabilities.maxImageExtent.width),
+            clamp(u32(window_frame_height), surface_capabilities.minImageExtent.height,  surface_capabilities.maxImageExtent.height),
+        }
+    }
+
+    swapchain_khr_createinfo := vk.SwapchainCreateInfoKHR {
+        sType = vk.StructureType.SWAPCHAIN_CREATE_INFO_KHR,
+        surface = surface_khr,
+        minImageCount = min(surface_capabilities.minImageCount+1, surface_capabilities.maxImageCount),
+        imageFormat = surface_device.surface_format.format,
+        imageColorSpace = surface_device.surface_format.colorSpace,
+        imageExtent = surface_extent,
+        imageArrayLayers = 1,
+        imageUsage = {.COLOR_ATTACHMENT},
+        preTransform = surface_capabilities.currentTransform,
+        compositeAlpha = {.OPAQUE},
+        presentMode = surface_device.surface_present_mode,
+        clipped = true, // clips from windows in front
+    }
+
+    if surface_device.family_index_graphics != surface_device.family_index_presentation {
+        swapchain_khr_createinfo.imageSharingMode = vk.SharingMode.CONCURRENT
+        swapchain_khr_createinfo.queueFamilyIndexCount = 2
+        swapchain_khr_createinfo.pQueueFamilyIndices = &surface_device.family_index_graphics // Points to both graphics and presentation index
+    }
+
+    // Create swapchain_khr
+    result_swapchain_khr := vk.CreateSwapchainKHR(logical_device, &swapchain_khr_createinfo, nil, &swapchain_khr)
+    when ODIN_DEBUG { 
+        if (result_swapchain_khr != vk.Result.SUCCESS) {
+            panic("Creating swapchain failed")
+        }
+    }
+
+    return
+}
+
+// Remember to delete swapchain_images to delete allocations
+CreateViewsForSwapChain::proc(logical_device: vk.Device, swapchain_khr: vk.SwapchainKHR, format: vk.Format) -> (swapchain_images: []vk.Image, swapchain_image_views : []vk.ImageView){
+    // Get image count
+    image_count: u32
+    vk.GetSwapchainImagesKHR(logical_device, swapchain_khr, &image_count,nil)
+
+    // Allocate memmory to save images and views
+    swapchain_images_size := size_of(vk.Image)*image_count
+    swapchain_images_and_views_buffer, _ := mem.alloc_bytes(int(swapchain_images_size + size_of(vk.ImageView)*image_count))
+    swapchain_images        = mem.slice_data_cast([]vk.Image,       swapchain_images_and_views_buffer[:swapchain_images_size])
+    swapchain_image_views   = mem.slice_data_cast([]vk.ImageView,   swapchain_images_and_views_buffer[swapchain_images_size:])
+    
+    // Get images
+    vk.GetSwapchainImagesKHR(logical_device, swapchain_khr, &image_count, raw_data(swapchain_images))
+
+    // Create views and fill swapchain_image_views
+    for swapchain_image, i in swapchain_images {
+        view_create_info := vk.ImageViewCreateInfo {
+            sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
+            image = swapchain_image,
+            viewType = vk.ImageViewType.D2,
+            format = format,
+            components = {.IDENTITY,.IDENTITY,.IDENTITY,.IDENTITY},
+            subresourceRange = {{.COLOR}, 0,1,0,1},
+        }
+
+        // Create swapchain_image_views
+        result_swapchain_image_view := vk.CreateImageView(logical_device, &view_create_info, nil, &swapchain_image_views[i])
+        when ODIN_DEBUG { 
+            if (result_swapchain_image_view != vk.Result.SUCCESS) {
+                panic("Creating image view failed")
+            }
+        }
+    }
+
+    return
+}
+
+CreateRenderPass :: proc(logical_device: vk.Device, format: vk.Format) -> (renderpass: vk.RenderPass) {
+    attachment_description := vk.AttachmentDescription {
+        format = format,
+        samples = {._1},
+        loadOp = .CLEAR,
+        storeOp = .STORE,
+        stencilLoadOp = .DONT_CARE,
+        stencilStoreOp = .DONT_CARE,
+        finalLayout = .PRESENT_SRC_KHR,
+    }
+
+    attachment_reference := vk.AttachmentReference {layout = .COLOR_ATTACHMENT_OPTIMAL}
+    subpass_description := vk.SubpassDescription {
+        pipelineBindPoint = .GRAPHICS,
+        colorAttachmentCount = 1,
+        pColorAttachments = &attachment_reference,
+    }
+
+    subpass_dependency := vk.SubpassDependency{
+        srcSubpass = vk.SUBPASS_EXTERNAL,
+        srcStageMask = {.COLOR_ATTACHMENT_OUTPUT},
+        dstStageMask = {.COLOR_ATTACHMENT_OUTPUT},
+        dstAccessMask = {.COLOR_ATTACHMENT_WRITE},
+    }
+
+    renderpass_createinfo := vk.RenderPassCreateInfo {
+        sType = vk.StructureType.RENDER_PASS_CREATE_INFO,
+        attachmentCount = 1,
+        pAttachments = &attachment_description,
+        subpassCount = 1,
+        pSubpasses = &subpass_description,
+        dependencyCount = 1,
+        pDependencies = &subpass_dependency,
+    }
+
+    // Create swapchain_image_views
+    result_renderpass := vk.CreateRenderPass(logical_device, &renderpass_createinfo, nil, &renderpass)
+    when ODIN_DEBUG { 
+        if (result_renderpass != vk.Result.SUCCESS) {
+            panic("Creating renderpass failed")
+        }
+    }
+
+    return
+}
+
+CreatePipeline :: proc(logical_device: vk.Device, surface_extent: vk.Extent2D, renderpass: vk.RenderPass) -> (pipeline: vk.Pipeline, pipeline_layout: vk.PipelineLayout){
+    triangle_vert_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_vert.spv", logical_device)
+    defer vk.DestroyShaderModule(logical_device, triangle_vert_shader_module, nil)
+    triangle_vert_shader_stage := vk.PipelineShaderStageCreateInfo {
+        sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
+        stage = {.VERTEX},
+        module = triangle_vert_shader_module,
+        pName = "main",
+    }
+
+    triangle_frag_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_frag.spv", logical_device)
+    defer vk.DestroyShaderModule(logical_device, triangle_frag_shader_module, nil)
+    triangle_frag_shader_stage := vk.PipelineShaderStageCreateInfo {
+        sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
+        stage = {.FRAGMENT},
+        module = triangle_frag_shader_module,
+        pName = "main",
+    }
+
+    triangle_shader_stages := [?]vk.PipelineShaderStageCreateInfo {triangle_vert_shader_stage, triangle_frag_shader_stage}
+
+    // How vertex data should be handled
+    vertex_input_createinfo := vk.PipelineVertexInputStateCreateInfo {sType = vk.StructureType.PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO}
+    assembly_input_createinfo := vk.PipelineInputAssemblyStateCreateInfo {
+        sType = vk.StructureType.PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        topology = .TRIANGLE_LIST,
+    }
+
+    // Where to draw
+    app_viewport := vk.Viewport{
+        width = f32(surface_extent.width),
+        height = f32(surface_extent.height),
+        maxDepth = 1,
+    }
+    app_scissor := vk.Rect2D{extent = surface_extent}
+
+    viewport_state_createinfo := vk.PipelineViewportStateCreateInfo{
+        sType = vk.StructureType.PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        pScissors = &app_scissor,
+        scissorCount = 1,
+        pViewports = &app_viewport,
+        viewportCount = 1,
+    }
+
+    // Create rasterizer
+    rasterizer_createinfo := vk.PipelineRasterizationStateCreateInfo {
+        sType = vk.StructureType.PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        cullMode = {.BACK},
+        frontFace = vk.FrontFace.CLOCKWISE,
+    }
+
+    multisampling_createinfo := vk.PipelineMultisampleStateCreateInfo {
+        sType = vk.StructureType.PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        minSampleShading = 1,
+        rasterizationSamples = {._1},
+    }
+
+    blend_alpha := vk.PipelineColorBlendAttachmentState {
+        colorWriteMask = {.R, .G, .B, .A},
+        blendEnable = true,
+        srcColorBlendFactor = .SRC_ALPHA,
+        dstColorBlendFactor = .ONE_MINUS_SRC_ALPHA,
+    }
+    blend_createinfo := vk.PipelineColorBlendStateCreateInfo {
+        sType = vk.StructureType.PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        attachmentCount = 1,
+        pAttachments = &blend_alpha,
+    }
+
+    // Set up dynamic states, that should be updated before drawing
+    dynamic_states := [?]vk.DynamicState{.VIEWPORT, .LINE_WIDTH}
+    dynamic_state_createinfo := vk.PipelineDynamicStateCreateInfo {
+        sType = vk.StructureType.PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        dynamicStateCount = 2,
+        pDynamicStates = &dynamic_states[0],
+    }
+
+    // Pipeline layout
+    pipeline_layout_createinfo := vk.PipelineLayoutCreateInfo {sType = vk.StructureType.PIPELINE_LAYOUT_CREATE_INFO}
+    result_pipeline_layout := vk.CreatePipelineLayout(logical_device, &pipeline_layout_createinfo, nil, &pipeline_layout)
+    when ODIN_DEBUG { 
+        if (result_pipeline_layout != vk.Result.SUCCESS) {
+            panic("Creating pipeline layout failed")
+        }
+    }
+
+    pipeline_createinfo := vk.GraphicsPipelineCreateInfo{
+        sType = vk.StructureType.GRAPHICS_PIPELINE_CREATE_INFO,
+        stageCount = 2,
+        pStages = &triangle_shader_stages[0],
+        pVertexInputState = &vertex_input_createinfo,
+        pInputAssemblyState = &assembly_input_createinfo,
+        pViewportState = &viewport_state_createinfo,
+        pRasterizationState = &rasterizer_createinfo,
+        pMultisampleState = &multisampling_createinfo,
+        pColorBlendState = &blend_createinfo,
+        //pDynamicState = &dynamic_state_createinfo,
+        layout = pipeline_layout,
+        renderPass = renderpass,
+    }
+
+    result_pipeline := vk.CreateGraphicsPipelines(logical_device, 0, 1, &pipeline_createinfo, nil, &pipeline)
+    when ODIN_DEBUG { 
+        if (result_pipeline != vk.Result.SUCCESS) {
+            panic("Creating graphics pipeline failed")
+        }
+    }
+    return
+}
+
+CreateFrameBuffers::proc(logical_device: vk.Device, renderpass: vk.RenderPass, image_views: ^[]vk.ImageView, surface_extent: vk.Extent2D) -> (framebuffers: []vk.Framebuffer){
+    framebuffers = make([]vk.Framebuffer, len(image_views))
+    for image_view, i in image_views {
+        framebuffer_createinfo := vk.FramebufferCreateInfo {
+            sType = vk.StructureType.FRAMEBUFFER_CREATE_INFO,
+            renderPass = renderpass,
+            attachmentCount = 1,
+            pAttachments = &image_view,
+            width = surface_extent.width,
+            height = surface_extent.height,
+            layers = 1,
+        }
+
+        // Create framebuffer
+        result_framebuffers := vk.CreateFramebuffer(logical_device, &framebuffer_createinfo, nil, &framebuffers[i])
+        when ODIN_DEBUG { 
+            if (result_framebuffers != vk.Result.SUCCESS) {
+                panic("Creating framebuffer failed")
+            }
+        }
+    }
+
+    return
+}
+
+ CreateCommandBufferWithPool::proc(logical_device: vk.Device, framebuffers: []vk.Framebuffer, 
+                                      family_index_graphics: u32, 
+                                      surface_extent: vk.Extent2D, renderpass: vk.RenderPass, 
+                                      pipeline: vk.Pipeline,
+                                     )->(command_buffers: []vk.CommandBuffer, command_pool: vk.CommandPool){
+    command_buffers = make([]vk.CommandBuffer, len(framebuffers))
+    command_pool_createinfo := vk.CommandPoolCreateInfo {
+        sType = vk.StructureType.COMMAND_POOL_CREATE_INFO,
+        queueFamilyIndex = family_index_graphics,
+    }
+
+    result_command_pool := vk.CreateCommandPool(logical_device, &command_pool_createinfo, nil, &command_pool)
+    when ODIN_DEBUG {
+        if (result_command_pool != vk.Result.SUCCESS) {
+            panic("Creating command pool failed")
+        }
+    }
+
+    command_buffers_info := vk.CommandBufferAllocateInfo {
+        sType = vk.StructureType.COMMAND_BUFFER_ALLOCATE_INFO,
+        commandPool = command_pool,
+        level = .PRIMARY,
+        commandBufferCount = u32(len(command_buffers)),
+    }
+
+    result_command_buffer := vk.AllocateCommandBuffers(logical_device, &command_buffers_info, raw_data(command_buffers))
+    when ODIN_DEBUG {
+        if result_command_buffer != vk.Result.SUCCESS {
+            panic("Creating command buffers failed")
+        }
+    }
+
+    for command_buffer, i in command_buffers {
+        command_buffer_begininfo := vk.CommandBufferBeginInfo {
+            sType = vk.StructureType.COMMAND_BUFFER_BEGIN_INFO,
+        }
+        result_command_buffer_begin := vk.BeginCommandBuffer(command_buffer, &command_buffer_begininfo)
+        when ODIN_DEBUG {
+            if result_command_buffer_begin != vk.Result.SUCCESS {
+                panic("Beginning command buffer failed")
+            }
+        }
+
+        clear_color := vk.ClearValue {color={float32={0.01, 0.01, 0.01, 0.5}}}
+        renderpass_begin_info := vk.RenderPassBeginInfo {
+            sType = vk.StructureType.RENDER_PASS_BEGIN_INFO,
+            renderPass = renderpass,
+            framebuffer = framebuffers[i],
+            renderArea = {{0,0}, surface_extent},
+            clearValueCount = 1,
+            pClearValues = &clear_color,
+        }
+
+        vk.CmdBeginRenderPass(command_buffer, &renderpass_begin_info, .INLINE)
+        vk.CmdBindPipeline(command_buffer, .GRAPHICS, pipeline)
+        vk.CmdDraw(command_buffer,3,1,0,0)
+        vk.CmdEndRenderPass(command_buffer)
+
+        result_command_buffer_end := vk.EndCommandBuffer(command_buffer)
+        when ODIN_DEBUG {
+            if result_command_buffer_end != vk.Result.SUCCESS {
+                panic("Ending recording of command buffer failed")
+            }
+        }
+    }
+
+    return
+}
