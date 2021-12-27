@@ -34,14 +34,15 @@ load_vulkan_function_pointers::proc()
 
 ApplicationState :: struct { // Use for state not for argument passing with callback
     window_handle: glfw.WindowHandle,
-    
     app_instance: vk.Instance,
     logical_device: vk.Device,
-    using swapchain_data: SwapchainData,
+    
+    surface_device: SurfaceDevice,
     surface_capabilities: vk.SurfaceCapabilitiesKHR,
-    renderpass: vk.RenderPass,
-
+    renderpass_default: vk.RenderPass,
     device_queues: DeviceQueues,
+    
+    using swapchain_data: SwapchainData,
     using exists_in_instance: VulkanInstanceExists, // Only filled in debug
 }
 
@@ -104,20 +105,22 @@ main::proc()
     }
 
     // Pick the physical device
-    surface_device := GetOptimalSurfaceDevice(app_instance, surface_khr)
+    surface_device = GetOptimalSurfaceDevice(app_instance, surface_khr)
     vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(surface_device.device_picked, surface_khr, &surface_capabilities)
-    application_state.logical_device = CreateDevice(surface_device, application_state.exists_vk_layer_khr_validation)
-    renderpass = CreateRenderPass(logical_device, surface_device.surface_format.format)
-    defer vk.DestroyRenderPass(logical_device, renderpass, nil)
-    defer vk.DestroyDevice(application_state.logical_device, nil)
+    logical_device = CreateDevice(surface_device, application_state.exists_vk_layer_khr_validation)
+    renderpass_default = CreateRenderPass(logical_device, surface_device.surface_format.format)
+    defer vk.DestroyDevice(logical_device, nil)
+    defer vk.DestroyRenderPass(logical_device, renderpass_default, nil)
     
     // Get Queues
     vk.GetDeviceQueue(application_state.logical_device, surface_device.family_index_graphics, 0, &device_queues.graphics)
     vk.GetDeviceQueue(application_state.logical_device, surface_device.family_index_presentation, 0, &device_queues.presentation)
     
     // Create swapchain
-    application_state.swapchain_data = CreateSwapchain(logical_device, window_handle, surface_khr, surface_capabilities, &surface_device, renderpass)
-    CreateSwapchain :: proc(logical_device: vk.Device, window_handle: glfw.WindowHandle, surface_khr: vk.SurfaceKHR, surface_capabilities: vk.SurfaceCapabilitiesKHR, surface_device: ^SurfaceDevice, renderpass: vk.RenderPass) -> (swapchain_data: SwapchainData) {
+    application_state.swapchain_data = CreateSwapchain(logical_device, window_handle, surface_khr, surface_capabilities, &surface_device, renderpass_default)
+    CreateSwapchain :: proc(logical_device: vk.Device, window_handle: glfw.WindowHandle, 
+                            surface_khr: vk.SurfaceKHR, surface_capabilities: vk.SurfaceCapabilitiesKHR, surface_device: ^SurfaceDevice, 
+                            renderpass: vk.RenderPass) -> (swapchain_data: SwapchainData) {
         using swapchain_data
         swapchain_khr, surface_extent = InitSwapchain(logical_device, window_handle, surface_khr, surface_capabilities, surface_device)
         images, image_views = CreateViewsForSwapChain(logical_device, swapchain_khr, surface_device.surface_format.format)
@@ -127,7 +130,6 @@ main::proc()
         return
     }
     
-    defer DestroySwapchain(application_state.logical_device, application_state.swapchain_data)
     DestroySwapchain::proc(logical_device: vk.Device, using swapchain_data: SwapchainData) {
         vk.DestroyCommandPool(logical_device, command_pool, nil)
         for framebuffer in framebuffers {
@@ -143,6 +145,7 @@ main::proc()
     defer delete(framebuffers)
     defer delete(command_buffers)
     defer delete(images)
+    defer DestroySwapchain(application_state.logical_device, application_state.swapchain_data)
     
     // Create semaphores and fences
     frame_sync_handles := CreateFrameSyncHandles(application_state.logical_device) 
