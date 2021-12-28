@@ -45,3 +45,29 @@ SwapchainBuffers :: struct {
     framebuffers:       []vk.Framebuffer,
     command_buffers:    []vk.CommandBuffer,
 }
+
+Material :: struct {
+    vertex: vk.ShaderModule,
+    fragment: vk.ShaderModule,
+}
+
+GraphicsPipelineInfo :: struct {
+    shader_stages: [2]vk.PipelineShaderStageCreateInfo,
+    
+    viewport: vk.Viewport,
+    scissor: vk.Rect2D,
+    viewport_state_createinfo: vk.PipelineViewportStateCreateInfo,
+    
+    vertex_input_createinfo: vk.PipelineVertexInputStateCreateInfo,
+    assembly_input_createinfo: vk.PipelineInputAssemblyStateCreateInfo, 
+    rasterizer_createinfo: vk.PipelineRasterizationStateCreateInfo,
+    
+    multisampling_createinfo: vk.PipelineMultisampleStateCreateInfo,
+    blend_alpha: vk.PipelineColorBlendAttachmentState,
+    blend_createinfo: vk.PipelineColorBlendStateCreateInfo,
+    
+    dynamic_states: [2]vk.DynamicState,
+    dynamic_state_createinfo: vk.PipelineDynamicStateCreateInfo,
+    
+    createinfo: vk.GraphicsPipelineCreateInfo,
+}

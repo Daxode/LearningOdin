@@ -9,7 +9,7 @@ import "vendor:stb/image"
 
 CreateWindowWithCallbacksAndIcon::proc() -> (window_handle: glfw.WindowHandle){
     glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
-    glfw.WindowHint(glfw.MAXIMIZED,0)
+    glfw.WindowHint(glfw.MAXIMIZED, 1)
     window_handle = glfw.CreateWindow(512, 512, "Vulkan Fun", nil, nil);
 
     glfw.SetKeyCallback(window_handle, glfw.KeyProc(proc(window_handle: glfw.WindowHandle, key, scancode, action, mods: c.int){
@@ -24,9 +24,10 @@ CreateWindowWithCallbacksAndIcon::proc() -> (window_handle: glfw.WindowHandle){
     }))
 
     glfw.SetFramebufferSizeCallback(window_handle, glfw.FramebufferSizeProc(proc(window_handle: glfw.WindowHandle, width, height: c.int){
-        application_state := (^ApplicationState)(glfw.GetWindowUserPointer(window_handle))^
-        fmt.println("Frame buffer size changed")
-        vk.DeviceWaitIdle(application_state.logical_device)
+        app := (^ApplicationState)(glfw.GetWindowUserPointer(window_handle))^
+        //vk.DeviceWaitIdle(app.logical_device)
+        //DestroySwapchainData(app.logical_device, app.swapchain_data)
+        //UpdateSwapchainData(app.logical_device, app.window_handle, app.surface_khr, &app.surface_device, app.renderpass_default, &app.triangle_pipeline_info, false, &app.swapchain_data)
     }))
     
     w, h, channels: c.int
@@ -277,7 +278,7 @@ CreateDevice::proc(surface_device: SurfaceDevice, exists_vk_layer_khr_validation
 
     // Setup Queue Device CreateInfo
     queuePriority : f32 = 1
-    device_queue_createinfos := make([dynamic]vk.DeviceQueueCreateInfo,0,4)
+    device_queue_createinfos := make([dynamic]vk.DeviceQueueCreateInfo,0,4, context.temp_allocator)
     defer delete(device_queue_createinfos)
     for family_index in u32(0)..<u32(32) {
         if !(family_index in family_index_set) {continue}
@@ -444,96 +445,78 @@ CreateRenderPass :: proc(logical_device: vk.Device, format: vk.Format) -> (rende
 }
 
 // Set up Graphics Pipeline
-CreatePipeline :: proc(logical_device: vk.Device, surface_extent: vk.Extent2D, renderpass: vk.RenderPass) -> (pipeline: vk.Pipeline, pipeline_layout: vk.PipelineLayout){
-    triangle_vert_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_vert.spv", logical_device)
-    defer vk.DestroyShaderModule(logical_device, triangle_vert_shader_module, nil)
-    triangle_vert_shader_stage := vk.PipelineShaderStageCreateInfo {
-        sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
-        stage = {.VERTEX},
-        module = triangle_vert_shader_module,
-        pName = "main",
-    }
+SetPipelineInfoFromMaterial :: proc(logical_device: vk.Device, renderpass: vk.RenderPass, pipeline_layout: vk.PipelineLayout, material: Material, graphics_pipeline_info: ^GraphicsPipelineInfo){
+    using graphics_pipeline_info
 
-    triangle_frag_shader_module, _ := CreateShaderModuleFromDevice("shaders_compiled/triangle_frag.spv", logical_device)
-    defer vk.DestroyShaderModule(logical_device, triangle_frag_shader_module, nil)
-    triangle_frag_shader_stage := vk.PipelineShaderStageCreateInfo {
-        sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
-        stage = {.FRAGMENT},
-        module = triangle_frag_shader_module,
-        pName = "main",
+    shader_stages = {
+        {
+            sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
+            stage = {.VERTEX},
+            module = material.vertex,
+            pName = "main",
+        },{
+            sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
+            stage = {.FRAGMENT},
+            module = material.fragment,
+            pName = "main",
+        },
     }
-
-    triangle_shader_stages := [?]vk.PipelineShaderStageCreateInfo {triangle_vert_shader_stage, triangle_frag_shader_stage}
 
     // How vertex data should be handled
-    vertex_input_createinfo := vk.PipelineVertexInputStateCreateInfo {sType = vk.StructureType.PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO}
-    assembly_input_createinfo := vk.PipelineInputAssemblyStateCreateInfo {
+    vertex_input_createinfo = vk.PipelineVertexInputStateCreateInfo {sType = vk.StructureType.PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO}
+    assembly_input_createinfo = vk.PipelineInputAssemblyStateCreateInfo {
         sType = vk.StructureType.PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         topology = .TRIANGLE_LIST,
     }
 
     // Where to draw
-    app_viewport := vk.Viewport{
-        width = f32(surface_extent.width),
-        height = f32(surface_extent.height),
-        maxDepth = 1,
-    }
-    app_scissor := vk.Rect2D{extent = surface_extent}
+    viewport.maxDepth = 1
 
-    viewport_state_createinfo := vk.PipelineViewportStateCreateInfo{
+    viewport_state_createinfo = vk.PipelineViewportStateCreateInfo {
         sType = vk.StructureType.PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-        pScissors = &app_scissor,
+        pScissors = &scissor,
         scissorCount = 1,
-        pViewports = &app_viewport,
+        pViewports = &viewport,
         viewportCount = 1,
     }
 
     // Create rasterizer
-    rasterizer_createinfo := vk.PipelineRasterizationStateCreateInfo {
+    rasterizer_createinfo = vk.PipelineRasterizationStateCreateInfo {
         sType = vk.StructureType.PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         cullMode = {.BACK},
         frontFace = vk.FrontFace.CLOCKWISE,
     }
 
-    multisampling_createinfo := vk.PipelineMultisampleStateCreateInfo {
+    multisampling_createinfo = vk.PipelineMultisampleStateCreateInfo {
         sType = vk.StructureType.PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         minSampleShading = 1,
         rasterizationSamples = {._1},
     }
 
-    blend_alpha := vk.PipelineColorBlendAttachmentState {
+    blend_alpha = vk.PipelineColorBlendAttachmentState {
         colorWriteMask = {.R, .G, .B, .A},
         blendEnable = true,
         srcColorBlendFactor = .SRC_ALPHA,
         dstColorBlendFactor = .ONE_MINUS_SRC_ALPHA,
     }
-    blend_createinfo := vk.PipelineColorBlendStateCreateInfo {
+    blend_createinfo = vk.PipelineColorBlendStateCreateInfo {
         sType = vk.StructureType.PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         attachmentCount = 1,
         pAttachments = &blend_alpha,
     }
 
     // Set up dynamic states, that should be updated before drawing
-    dynamic_states := [?]vk.DynamicState{.VIEWPORT, .LINE_WIDTH}
-    dynamic_state_createinfo := vk.PipelineDynamicStateCreateInfo {
+    dynamic_states = [?]vk.DynamicState{.VIEWPORT, .LINE_WIDTH}
+    dynamic_state_createinfo = vk.PipelineDynamicStateCreateInfo {
         sType = vk.StructureType.PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         dynamicStateCount = 2,
         pDynamicStates = &dynamic_states[0],
     }
 
-    // Pipeline layout
-    pipeline_layout_createinfo := vk.PipelineLayoutCreateInfo {sType = vk.StructureType.PIPELINE_LAYOUT_CREATE_INFO}
-    result_pipeline_layout := vk.CreatePipelineLayout(logical_device, &pipeline_layout_createinfo, nil, &pipeline_layout)
-    when ODIN_DEBUG { 
-        if (result_pipeline_layout != vk.Result.SUCCESS) {
-            panic("Creating pipeline layout failed")
-        }
-    }
-
-    pipeline_createinfo := vk.GraphicsPipelineCreateInfo{
+    createinfo = vk.GraphicsPipelineCreateInfo{
         sType = vk.StructureType.GRAPHICS_PIPELINE_CREATE_INFO,
         stageCount = 2,
-        pStages = &triangle_shader_stages[0],
+        pStages = &shader_stages[0],
         pVertexInputState = &vertex_input_createinfo,
         pInputAssemblyState = &assembly_input_createinfo,
         pViewportState = &viewport_state_createinfo,
@@ -541,16 +524,9 @@ CreatePipeline :: proc(logical_device: vk.Device, surface_extent: vk.Extent2D, r
         pMultisampleState = &multisampling_createinfo,
         pColorBlendState = &blend_createinfo,
         //pDynamicState = &dynamic_state_createinfo,
-        layout = pipeline_layout,
         renderPass = renderpass,
     }
 
-    result_pipeline := vk.CreateGraphicsPipelines(logical_device, 0, 1, &pipeline_createinfo, nil, &pipeline)
-    when ODIN_DEBUG { 
-        if (result_pipeline != vk.Result.SUCCESS) {
-            panic("Creating graphics pipeline failed")
-        }
-    }
     return
 }
 
@@ -669,27 +645,54 @@ CreateSwapchainBuffers::proc(logical_device: vk.Device, swapchain_khr: vk.Swapch
     return
 }
 
-CreateSwapchain :: proc(logical_device: vk.Device, window_handle: glfw.WindowHandle, 
-                        surface_khr: vk.SurfaceKHR, surface_capabilities: vk.SurfaceCapabilitiesKHR, surface_device: ^SurfaceDevice, 
-                        renderpass: vk.RenderPass, swapchain_buffers: SwapchainBuffers) -> (swapchain_data: SwapchainData) {
-    using swapchain_data
-    using swapchain_data.swapchain_buffers
+// pipeline_createinfo can only point to zero init place if first_time is true
+UpdateSwapchainData :: proc(logical_device: vk.Device, window_handle: glfw.WindowHandle, 
+                        surface_khr: vk.SurfaceKHR, surface_device: ^SurfaceDevice, 
+                        renderpass: vk.RenderPass, pipeline_info: ^GraphicsPipelineInfo, first_time: b8, using swapchain_data: ^SwapchainData) {
+
+    surface_capabilities: vk.SurfaceCapabilitiesKHR
+    vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(surface_device.device_picked, surface_khr, &surface_capabilities)
     swapchain_khr, surface_extent = InitSwapchain(logical_device, window_handle, surface_khr, surface_capabilities, surface_device)
-    if len(swapchain_buffers.images) == 0 {swapchain_buffers = CreateSwapchainBuffers(logical_device, swapchain_khr)}
-    CreateViewsForSwapChain(logical_device, swapchain_khr, surface_device.surface_format.format, images, image_views)
-    pipeline, pipeline_layout = CreatePipeline(logical_device, surface_extent, renderpass)
-    CreateFrameBuffers(logical_device, renderpass, &image_views, surface_extent, swapchain_buffers.framebuffers)
-    command_pool = CreateCommandBufferWithPool(logical_device, framebuffers, surface_device.family_index_graphics, surface_extent, renderpass, pipeline, command_buffers)
+    
+    if first_time {
+        swapchain_buffers = CreateSwapchainBuffers(logical_device, swapchain_khr)
+        
+        triangle_material: Material
+        triangle_material.vertex, _ = CreateShaderModuleFromDevice("shaders_compiled/triangle_vert.spv", logical_device)
+        triangle_material.fragment, _ = CreateShaderModuleFromDevice("shaders_compiled/triangle_frag.spv", logical_device)
+        SetPipelineInfoFromMaterial(logical_device, renderpass, pipeline_layout, triangle_material, pipeline_info)
+
+        pipeline_layout_createinfo := vk.PipelineLayoutCreateInfo {sType = vk.StructureType.PIPELINE_LAYOUT_CREATE_INFO}
+        result_pipeline_layout := vk.CreatePipelineLayout(logical_device, &pipeline_layout_createinfo, nil, &pipeline_layout)
+        when ODIN_DEBUG { 
+            if (result_pipeline_layout != vk.Result.SUCCESS) {
+                panic("Creating pipeline layout failed")
+            }
+        }
+        pipeline_info.createinfo.layout = pipeline_layout
+    }
+
+    pipeline_info.viewport.width = f32(surface_extent.width)
+    pipeline_info.viewport.height = f32(surface_extent.height)
+    pipeline_info.scissor.extent = surface_extent
+    result_pipeline := vk.CreateGraphicsPipelines(logical_device, 0, 1, &pipeline_info.createinfo, nil, &pipeline)
+    when ODIN_DEBUG { 
+        if (result_pipeline != vk.Result.SUCCESS) {
+            panic("Creating graphics pipeline failed")
+        }
+    }
+    CreateViewsForSwapChain(logical_device, swapchain_khr, surface_device.surface_format.format, swapchain_buffers.images, swapchain_buffers.image_views)
+    CreateFrameBuffers(logical_device, renderpass, &swapchain_buffers.image_views, surface_extent, swapchain_buffers.framebuffers)
+    command_pool = CreateCommandBufferWithPool(logical_device, swapchain_buffers.framebuffers, surface_device.family_index_graphics, surface_extent, renderpass, pipeline, swapchain_buffers.command_buffers)
     return
 }
     
-DestroySwapchain::proc(logical_device: vk.Device, using swapchain_data: SwapchainData) {
+DestroySwapchainData::proc(logical_device: vk.Device, using swapchain_data: SwapchainData) {
+    vk.DestroyPipeline(logical_device, pipeline, nil)
     vk.DestroyCommandPool(logical_device, command_pool, nil)
     for framebuffer in swapchain_buffers.framebuffers {
         vk.DestroyFramebuffer(logical_device, framebuffer, nil)
     }
-    vk.DestroyPipeline(logical_device, pipeline, nil)
-    vk.DestroyPipelineLayout(logical_device, pipeline_layout, nil)
     for image_view in swapchain_buffers.image_views {
         vk.DestroyImageView(logical_device, image_view, nil)
     }
