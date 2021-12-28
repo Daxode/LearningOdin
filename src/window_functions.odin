@@ -7,24 +7,47 @@ import "vendor:glfw"
 import vk "vendor:vulkan"
 import "vendor:stb/image"
 
+import "core:c/libc"
+import "core:runtime"
+
+
 CreateWindowWithCallbacksAndIcon::proc() -> (window_handle: glfw.WindowHandle){
     glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
     glfw.WindowHint(glfw.MAXIMIZED, 1)
     window_handle = glfw.CreateWindow(512, 512, "Vulkan Fun", nil, nil);
 
-    glfw.SetKeyCallback(window_handle, glfw.KeyProc(proc(window_handle: glfw.WindowHandle, key, scancode, action, mods: c.int){
+    glfw.SetKeyCallback(window_handle, proc "c" (window_handle: glfw.WindowHandle, key, scancode, action, mods: c.int){
+        app := (^ApplicationState)(glfw.GetWindowUserPointer(window_handle))
+        context = runtime.default_context()
         if action == glfw.PRESS {
             switch key {
                 case glfw.KEY_F1:
                     //glfw.SetWindowMonitor()
+                case glfw.KEY_F5:
+                    when ODIN_DEBUG {
+                        libc.system("glslc.exe ../shaders/triangle.vert -o shaders_compiled/triangle_vert.spv")
+                        libc.system("glslc.exe ../shaders/triangle.frag -o shaders_compiled/triangle_frag.spv")
+                    }
+
+                    vk.DestroyShaderModule(app.logical_device, app.triangle_material.vertex,nil)
+                    vk.DestroyShaderModule(app.logical_device, app.triangle_material.fragment,nil)
+                    app.triangle_material.vertex, _ = CreateShaderModuleFromDevice("shaders_compiled/triangle_vert.spv", app.logical_device)
+                    app.triangle_material.fragment, _ = CreateShaderModuleFromDevice("shaders_compiled/triangle_frag.spv", app.logical_device)
+
+                    app.triangle_pipeline_info.stage_vertex_createinfo.module = app.triangle_material.vertex
+                    app.triangle_pipeline_info.stage_fragment_createinfo.module = app.triangle_material.fragment
+
+                    app.should_swap = true
+                    //SwapSwapchain(&app)
                 case glfw.KEY_ESCAPE:
                     glfw.SetWindowShouldClose(window_handle, true)
             }
         }
-    }))
+    })
 
     glfw.SetFramebufferSizeCallback(window_handle, glfw.FramebufferSizeProc(proc(window_handle: glfw.WindowHandle, width, height: c.int){
-        app := (^ApplicationState)(glfw.GetWindowUserPointer(window_handle))^
+        app := (^ApplicationState)(glfw.GetWindowUserPointer(window_handle))
+        app.should_swap = true
         //vk.DeviceWaitIdle(app.logical_device)
         //DestroySwapchainData(app.logical_device, app.swapchain_data)
         //UpdateSwapchainData(app.logical_device, app.window_handle, app.surface_khr, &app.surface_device, app.renderpass_default, &app.triangle_pipeline_info, false, &app.swapchain_data)
@@ -448,18 +471,17 @@ CreateRenderPass :: proc(logical_device: vk.Device, format: vk.Format) -> (rende
 SetPipelineInfoFromMaterial :: proc(logical_device: vk.Device, renderpass: vk.RenderPass, pipeline_layout: vk.PipelineLayout, material: Material, graphics_pipeline_info: ^GraphicsPipelineInfo){
     using graphics_pipeline_info
 
-    shader_stages = {
-        {
-            sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
-            stage = {.VERTEX},
-            module = material.vertex,
-            pName = "main",
-        },{
-            sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
-            stage = {.FRAGMENT},
-            module = material.fragment,
-            pName = "main",
-        },
+    stage_vertex_createinfo = {
+        sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
+        stage = {.VERTEX},
+        module = material.vertex,
+        pName = "main",
+    }
+    stage_fragment_createinfo = {
+        sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
+        stage = {.FRAGMENT},
+        module = material.fragment,
+        pName = "main",
     }
 
     // How vertex data should be handled
@@ -506,17 +528,17 @@ SetPipelineInfoFromMaterial :: proc(logical_device: vk.Device, renderpass: vk.Re
     }
 
     // Set up dynamic states, that should be updated before drawing
-    dynamic_states = [?]vk.DynamicState{.VIEWPORT, .LINE_WIDTH}
-    dynamic_state_createinfo = vk.PipelineDynamicStateCreateInfo {
-        sType = vk.StructureType.PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        dynamicStateCount = 2,
-        pDynamicStates = &dynamic_states[0],
-    }
+    // dynamic_states = [?]vk.DynamicState{.VIEWPORT, .LINE_WIDTH}
+    // dynamic_state_createinfo = vk.PipelineDynamicStateCreateInfo {
+    //     sType = vk.StructureType.PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+    //     dynamicStateCount = 2,
+    //     pDynamicStates = &dynamic_states[0],
+    // }
 
     createinfo = vk.GraphicsPipelineCreateInfo{
         sType = vk.StructureType.GRAPHICS_PIPELINE_CREATE_INFO,
         stageCount = 2,
-        pStages = &shader_stages[0],
+        pStages = &stage_vertex_createinfo,
         pVertexInputState = &vertex_input_createinfo,
         pInputAssemblyState = &assembly_input_createinfo,
         pViewportState = &viewport_state_createinfo,
@@ -693,4 +715,11 @@ DestroySwapchainData::proc(logical_device: vk.Device, using swapchain_data: Swap
         vk.DestroyImageView(logical_device, image_view, nil)
     }
     vk.DestroySwapchainKHR(logical_device, swapchain_khr, nil)
+}
+
+SwapSwapchain::proc(using application_state: ^ApplicationState) {
+    vk.DeviceWaitIdle(logical_device)
+    DestroySwapchainData(logical_device, swapchain_data)
+    UpdateSwapchainData(logical_device, window_handle, surface_khr, &surface_device, renderpass_default, triangle_material, &triangle_pipeline_info, false, &swapchain_data)  
+    application_state.should_swap = false  
 }

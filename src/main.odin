@@ -45,6 +45,7 @@ ApplicationState :: struct { // Use for state not for argument passing with call
     triangle_pipeline_info: GraphicsPipelineInfo,
     triangle_material: Material,
     
+    should_swap: b8,
     using swapchain_data: SwapchainData,
     using exists_in_instance: VulkanInstanceExists, // Only filled in debug
 }
@@ -176,7 +177,7 @@ main::proc()
         DrawFrame(application_state.logical_device, &frame_sync_handles, &swapchain_khr, device_queues, &swapchain_buffers.command_buffers, &current_bucket_index, &application_state)
 
         // After frame update
-        fmt.println("Delta Seconds:", time_delta)
+        //fmt.println("Delta Seconds:", time_delta)
         time_frame_last = time_frame_current
     }
 }
@@ -184,9 +185,9 @@ main::proc()
 // Based on the given logical device, 
 // it loads the given path to a SPIR-V, 
 // and creates a shader module on the device
-CreateShaderModuleFromDevice :: proc(path: string, device: vk.Device) -> (shader_module: vk.ShaderModule, success: bool) {
+CreateShaderModuleFromDevice :: proc(path: string, device: vk.Device, allocator := context.allocator) -> (shader_module: vk.ShaderModule, success: bool) {
     shader_bytes: []u8
-    shader_bytes, success = os.read_entire_file(path)
+    shader_bytes, success = os.read_entire_file(path, allocator)
 
     createinfo := vk.ShaderModuleCreateInfo {
         sType = vk.StructureType.SHADER_MODULE_CREATE_INFO,

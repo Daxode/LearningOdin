@@ -52,7 +52,7 @@ Material :: struct {
 }
 
 GraphicsPipelineInfo :: struct {
-    shader_stages: [2]vk.PipelineShaderStageCreateInfo,
+    stage_vertex_createinfo, stage_fragment_createinfo: vk.PipelineShaderStageCreateInfo,
     
     viewport: vk.Viewport,
     scissor: vk.Rect2D,
@@ -66,8 +66,8 @@ GraphicsPipelineInfo :: struct {
     blend_alpha: vk.PipelineColorBlendAttachmentState,
     blend_createinfo: vk.PipelineColorBlendStateCreateInfo,
     
-    dynamic_states: [2]vk.DynamicState,
-    dynamic_state_createinfo: vk.PipelineDynamicStateCreateInfo,
+    //dynamic_states: [2]vk.DynamicState,
+    //dynamic_state_createinfo: vk.PipelineDynamicStateCreateInfo,
     
     createinfo: vk.GraphicsPipelineCreateInfo,
 }
