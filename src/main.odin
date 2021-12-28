@@ -43,6 +43,7 @@ ApplicationState :: struct { // Use for state not for argument passing with call
     device_queues: DeviceQueues,
 
     triangle_pipeline_info: GraphicsPipelineInfo,
+    triangle_material: Material,
     
     using swapchain_data: SwapchainData,
     using exists_in_instance: VulkanInstanceExists, // Only filled in debug
@@ -117,7 +118,12 @@ main::proc()
     vk.GetDeviceQueue(application_state.logical_device, surface_device.family_index_presentation, 0, &device_queues.presentation)
     
     // Create swapchain
-    UpdateSwapchainData(logical_device, window_handle, surface_khr, &surface_device, renderpass_default, &triangle_pipeline_info, true, &application_state.swapchain_data)
+    triangle_material.vertex, _ = CreateShaderModuleFromDevice("shaders_compiled/triangle_vert.spv", logical_device)
+    triangle_material.fragment, _ = CreateShaderModuleFromDevice("shaders_compiled/triangle_frag.spv", logical_device)
+    defer vk.DestroyShaderModule(logical_device, triangle_material.vertex,nil)
+    defer vk.DestroyShaderModule(logical_device, triangle_material.fragment,nil)
+
+    UpdateSwapchainData(logical_device, window_handle, surface_khr, &surface_device, renderpass_default, triangle_material, &triangle_pipeline_info, true, &application_state.swapchain_data)
     defer delete(swapchain_buffers.images)
     defer vk.DestroyPipelineLayout(logical_device, pipeline_layout, nil)
     defer DestroySwapchainData(application_state.logical_device, application_state.swapchain_data)

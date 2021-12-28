@@ -106,7 +106,7 @@ CreateVulkanInstanceWithDebugMSG :: proc(application_info: ^vk.ApplicationInfo, 
         if exists.exists_vk_ext_debug_utils {
             debug_createinfo = {
                 sType = vk.StructureType.DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-                messageSeverity = {.VERBOSE, .INFO, .WARNING, .ERROR},
+                messageSeverity = {.INFO, .WARNING, .ERROR},
                 messageType = {.GENERAL, .VALIDATION, .PERFORMANCE},
                 pfnUserCallback = vk.ProcDebugUtilsMessengerCallbackEXT(proc(
                     msgSeverity: vk.DebugUtilsMessageSeverityFlagsEXT, msgTypes: vk.DebugUtilsMessageTypeFlagsEXT, 
@@ -648,7 +648,7 @@ CreateSwapchainBuffers::proc(logical_device: vk.Device, swapchain_khr: vk.Swapch
 // pipeline_createinfo can only point to zero init place if first_time is true
 UpdateSwapchainData :: proc(logical_device: vk.Device, window_handle: glfw.WindowHandle, 
                         surface_khr: vk.SurfaceKHR, surface_device: ^SurfaceDevice, 
-                        renderpass: vk.RenderPass, pipeline_info: ^GraphicsPipelineInfo, first_time: b8, using swapchain_data: ^SwapchainData) {
+                        renderpass: vk.RenderPass, material: Material, pipeline_info: ^GraphicsPipelineInfo, first_time: b8, using swapchain_data: ^SwapchainData) {
 
     surface_capabilities: vk.SurfaceCapabilitiesKHR
     vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(surface_device.device_picked, surface_khr, &surface_capabilities)
@@ -656,11 +656,7 @@ UpdateSwapchainData :: proc(logical_device: vk.Device, window_handle: glfw.Windo
     
     if first_time {
         swapchain_buffers = CreateSwapchainBuffers(logical_device, swapchain_khr)
-        
-        triangle_material: Material
-        triangle_material.vertex, _ = CreateShaderModuleFromDevice("shaders_compiled/triangle_vert.spv", logical_device)
-        triangle_material.fragment, _ = CreateShaderModuleFromDevice("shaders_compiled/triangle_frag.spv", logical_device)
-        SetPipelineInfoFromMaterial(logical_device, renderpass, pipeline_layout, triangle_material, pipeline_info)
+        SetPipelineInfoFromMaterial(logical_device, renderpass, pipeline_layout, material, pipeline_info)
 
         pipeline_layout_createinfo := vk.PipelineLayoutCreateInfo {sType = vk.StructureType.PIPELINE_LAYOUT_CREATE_INFO}
         result_pipeline_layout := vk.CreatePipelineLayout(logical_device, &pipeline_layout_createinfo, nil, &pipeline_layout)

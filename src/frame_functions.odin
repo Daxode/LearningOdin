@@ -17,7 +17,7 @@ DrawFrame::proc(logical_device: vk.Device, frame_sync_handles: ^FrameSyncHandles
     if result_acquire_next_image == vk.Result.ERROR_OUT_OF_DATE_KHR {
         vk.DeviceWaitIdle(logical_device)
         DestroySwapchainData(logical_device, application_state.swapchain_data)
-        UpdateSwapchainData(logical_device, application_state.window_handle, application_state.surface_khr, &application_state.surface_device, application_state.renderpass_default, &application_state.triangle_pipeline_info, false, &application_state.swapchain_data)
+        UpdateSwapchainData(logical_device, application_state.window_handle, application_state.surface_khr, &application_state.surface_device, application_state.renderpass_default, application_state.triangle_material, &application_state.triangle_pipeline_info, false, &application_state.swapchain_data)
         return
     } else {when ODIN_DEBUG {if result_acquire_next_image!= vk.Result.SUCCESS{fmt.println("Couldn't acquire next image: ", result_acquire_next_image)}}}
     
@@ -60,7 +60,7 @@ DrawFrame::proc(logical_device: vk.Device, frame_sync_handles: ^FrameSyncHandles
     if result_queue_present_khr == vk.Result.ERROR_OUT_OF_DATE_KHR {
         vk.DeviceWaitIdle(logical_device)
         DestroySwapchainData(logical_device, application_state.swapchain_data)
-        UpdateSwapchainData(logical_device, application_state.window_handle, application_state.surface_khr, &application_state.surface_device, application_state.renderpass_default, &application_state.triangle_pipeline_info, false, &application_state.swapchain_data)
+        UpdateSwapchainData(logical_device, application_state.window_handle, application_state.surface_khr, &application_state.surface_device, application_state.renderpass_default, application_state.triangle_material, &application_state.triangle_pipeline_info, false, &application_state.swapchain_data)
         return
     } else {when ODIN_DEBUG {if result_queue_present_khr!= vk.Result.SUCCESS{fmt.println("Couldn't queue for presentation: ", result_queue_present_khr)}}}
 }
