@@ -11,18 +11,10 @@ DrawFrame::proc(logical_device: vk.Device, frame_sync_handles: ^FrameSyncHandles
     vk.WaitForFences(logical_device, 1, &frame_sync_handles.fences_from_bucket_index[current_bucket_index^], false, c.UINT64_MAX)
     vk.ResetFences(logical_device, 1, &frame_sync_handles.fences_from_bucket_index[current_bucket_index^])
     
-    // if application_state.should_swap {
-    //     SwapSwapchain(application_state)
-    //     return
-    // }
-
     // Acquire image to draw
     image_index: u32
     result_acquire_next_image := vk.AcquireNextImageKHR(logical_device, swapchain_khr^, c.UINT64_MAX, frame_sync_handles.semaphores_image_available[current_bucket_index^], 0, &image_index)
-    // if result_acquire_next_image == vk.Result.ERROR_OUT_OF_DATE_KHR {
-    //     SwapSwapchain(application_state)
-    //     return
-    // } else {when ODIN_DEBUG {if result_acquire_next_image!= vk.Result.SUCCESS{fmt.println("Couldn't acquire next image: ", result_acquire_next_image)}}}
+    when ODIN_DEBUG {if result_acquire_next_image!= vk.Result.SUCCESS{fmt.println("Couldn't acquire next image: ", result_acquire_next_image)}}
     
     // Submit the command to draw
     wait_mask := vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT}

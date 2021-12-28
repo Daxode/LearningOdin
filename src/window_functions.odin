@@ -33,7 +33,6 @@ CreateWindowWithCallbacksAndIcon::proc() -> (window_handle: glfw.WindowHandle){
                     vk.DestroyShaderModule(app.logical_device, app.triangle_material.fragment,nil)
                     app.triangle_material.vertex, _ = CreateShaderModuleFromDevice("shaders_compiled/triangle_vert.spv", app.logical_device)
                     app.triangle_material.fragment, _ = CreateShaderModuleFromDevice("shaders_compiled/triangle_frag.spv", app.logical_device)
-
                     app.triangle_pipeline_info.stage_vertex_createinfo.module = app.triangle_material.vertex
                     app.triangle_pipeline_info.stage_fragment_createinfo.module = app.triangle_material.fragment
 
@@ -48,9 +47,6 @@ CreateWindowWithCallbacksAndIcon::proc() -> (window_handle: glfw.WindowHandle){
     glfw.SetFramebufferSizeCallback(window_handle, glfw.FramebufferSizeProc(proc(window_handle: glfw.WindowHandle, width, height: c.int){
         app := (^ApplicationState)(glfw.GetWindowUserPointer(window_handle))
         app.should_swap = true
-        //vk.DeviceWaitIdle(app.logical_device)
-        //DestroySwapchainData(app.logical_device, app.swapchain_data)
-        //UpdateSwapchainData(app.logical_device, app.window_handle, app.surface_khr, &app.surface_device, app.renderpass_default, &app.triangle_pipeline_info, false, &app.swapchain_data)
     }))
     
     w, h, channels: c.int
@@ -620,7 +616,8 @@ CreateFrameBuffers::proc(logical_device: vk.Device, renderpass: vk.RenderPass, i
             }
         }
 
-        clear_color := vk.ClearValue {color={float32={0.01, 0.01, 0.01, 0.5}}}
+        clear_color := vk.ClearValue {color={float32={0.02, 0.015, 0.015, 0.5}}}
+        
         renderpass_begin_info := vk.RenderPassBeginInfo {
             sType = vk.StructureType.RENDER_PASS_BEGIN_INFO,
             renderPass = renderpass,
@@ -632,7 +629,7 @@ CreateFrameBuffers::proc(logical_device: vk.Device, renderpass: vk.RenderPass, i
 
         vk.CmdBeginRenderPass(command_buffer, &renderpass_begin_info, .INLINE)
         vk.CmdBindPipeline(command_buffer, .GRAPHICS, pipeline)
-        vk.CmdDraw(command_buffer,3,1,0,0)
+        vk.CmdDraw(command_buffer,6,1,0,0)
         vk.CmdEndRenderPass(command_buffer)
 
         result_command_buffer_end := vk.EndCommandBuffer(command_buffer)
