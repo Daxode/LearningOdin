@@ -36,7 +36,7 @@ main::proc()
 {
     load_vulkan_function_pointers()
     
-    when ODIN_DEBUG {
+    when DAX_DEBUG {
         fmt.println("debug enabled")
     }
 
@@ -53,7 +53,7 @@ main::proc()
     glfw.SetWindowUserPointer(application_state.window_handle, &application_state)
 
     // Check validation layers and for VK_EXT_debug_utils
-    when ODIN_DEBUG {
+    when DAX_DEBUG {
         application_state.exists_in_instance = CheckVulkanInstanceExistence()
     }
 
@@ -71,7 +71,7 @@ main::proc()
     debugMessengerEXT: vk.DebugUtilsMessengerEXT
     application_state.app_instance, debugMessengerEXT = CreateVulkanInstanceWithDebugMSG(&appplication_info, &application_state.exists_in_instance)
     defer vk.DestroyInstance(application_state.app_instance, nil)
-    defer when ODIN_DEBUG {
+    defer when DAX_DEBUG {
         if exists_in_instance.exists_vk_ext_debug_utils {
             DestroyDebugUtilsMessengerEXT := vk.ProcDestroyDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(application_state.app_instance, "vkDestroyDebugUtilsMessengerEXT"));
             if (DestroyDebugUtilsMessengerEXT != nil) {
@@ -84,7 +84,7 @@ main::proc()
     defer vk.DestroySurfaceKHR(app_instance, surface_khr, nil)
     {
         resultCreateWindowSurface := glfw.CreateWindowSurface(app_instance, application_state.window_handle, nil, &surface_khr)
-        when ODIN_DEBUG { 
+        when DAX_DEBUG { 
             if (resultCreateWindowSurface != vk.Result.SUCCESS) {
                 panic("Creating window surface failed")
             }
@@ -129,14 +129,14 @@ main::proc()
         for i in 0..<FRAME_IN_Q_MAX {
             result_semaphore_image_available := vk.CreateSemaphore(logical_device, &semaphore_createinfo, nil, &frame_sync_handles.semaphores_image_available[i])
             result_semaphore_render_finished := vk.CreateSemaphore(logical_device, &semaphore_createinfo, nil, &frame_sync_handles.semaphores_render_finished[i])
-            when ODIN_DEBUG {
+            when DAX_DEBUG {
                 if (result_semaphore_image_available != vk.Result.SUCCESS || result_semaphore_render_finished != vk.Result.SUCCESS) {
                     panic("Creating semaphores failed")
                 }
             }
 
             result_fence_from_bucket_index := vk.CreateFence(logical_device, &fence_createinfo, nil, &frame_sync_handles.fences_from_bucket_index[i])
-            when ODIN_DEBUG {
+            when DAX_DEBUG {
                 if (result_fence_from_bucket_index != vk.Result.SUCCESS) {
                     panic("Creating fence failed")
                 }
@@ -168,7 +168,7 @@ CreateShaderModuleFromDevice :: proc(path: string, device: vk.Device, allocator 
     }
 
     result_shader_module := vk.CreateShaderModule(device, &createinfo, nil, &shader_module)
-    when ODIN_DEBUG { 
+    when DAX_DEBUG { 
         if (result_shader_module != vk.Result.SUCCESS) {
             panic("Creating shader module failed")
         }

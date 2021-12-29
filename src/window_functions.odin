@@ -44,7 +44,7 @@ CreateWindowWithCallbacksAndIcon::proc() -> (window_handle: glfw.WindowHandle){
                     }
                 case glfw.KEY_F5:
                     // Reload Shaders and Swapchain
-                    when ODIN_DEBUG {
+                    when DAX_DEBUG {
                         libc.system("glslc.exe ../shaders/triangle.vert -o shaders_compiled/triangle_vert.spv")
                         libc.system("glslc.exe ../shaders/triangle.frag -o shaders_compiled/triangle_frag.spv")
                     }
@@ -111,7 +111,7 @@ CreateVulkanInstanceWithDebugMSG :: proc(application_info: ^vk.ApplicationInfo, 
         pApplicationInfo = application_info,
     }
     
-    when ODIN_DEBUG {
+    when DAX_DEBUG {
         if exists.exists_vk_layer_khr_validation {
             instance_createinfo.enabledLayerCount = 1
             layerKHRVal : cstring = "VK_LAYER_KHRONOS_validation"
@@ -120,7 +120,7 @@ CreateVulkanInstanceWithDebugMSG :: proc(application_info: ^vk.ApplicationInfo, 
     }
 
     required_instance_extensions := glfw.GetRequiredInstanceExtensions();
-    when ODIN_DEBUG {
+    when DAX_DEBUG {
         enabled_extensions: []cstring
         defer if exists.exists_vk_ext_debug_utils{delete(enabled_extensions, context.temp_allocator)} 
         // Append VK_EXT_debug_utils to list of required_instance_extensions
@@ -140,7 +140,7 @@ CreateVulkanInstanceWithDebugMSG :: proc(application_info: ^vk.ApplicationInfo, 
     }
 
     // Create Debugger
-    when ODIN_DEBUG {
+    when DAX_DEBUG {
         debug_createinfo: vk.DebugUtilsMessengerCreateInfoEXT
         if exists.exists_vk_ext_debug_utils {
             debug_createinfo = {
@@ -170,13 +170,13 @@ CreateVulkanInstanceWithDebugMSG :: proc(application_info: ^vk.ApplicationInfo, 
 
     // Create instance
     result_create_instance := vk.CreateInstance(&instance_createinfo, nil, &instance)
-    when ODIN_DEBUG { 
+    when DAX_DEBUG { 
         if (result_create_instance != vk.Result.SUCCESS) {
             panic("Creating Vulkan instance failed");
         }
     }
 
-    when ODIN_DEBUG {
+    when DAX_DEBUG {
         if exists.exists_vk_ext_debug_utils {
             CreateDebugUtilsMessengerEXT := vk.ProcCreateDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
             if (CreateDebugUtilsMessengerEXT != nil) {
@@ -237,7 +237,7 @@ GetOptimalSurfaceDevice::proc(app_instance: vk.Instance, surface_khr: vk.Surface
                 qFamiliesSupported |= {.PRESENTATION}
             }
 
-            when ODIN_DEBUG {fmt.println("QueueCount:",queue_family.queueCount, queue_family.queueFlags, "HasPresentation:",presentSupport)}
+            when DAX_DEBUG {fmt.println("QueueCount:",queue_family.queueCount, queue_family.queueFlags, "HasPresentation:",presentSupport)}
         }
 
         // Calculate Score
@@ -302,12 +302,12 @@ GetOptimalSurfaceDevice::proc(app_instance: vk.Instance, surface_khr: vk.Surface
             deviceBestScore = deviceCurrentScore
         }
 
-        when ODIN_DEBUG {
+        when DAX_DEBUG {
             fmt.println("Checked device:", cstring(&physical_device_properties.deviceName[0]))
         }
     }
 
-    when ODIN_DEBUG {
+    when DAX_DEBUG {
         fmt.println("Surface devices:", surface_devices)
         if bestDeviceIndex == nil {
             panic("No suitable device found!")
@@ -351,7 +351,7 @@ CreateDevice::proc(surface_device: SurfaceDevice, exists_vk_layer_khr_validation
         ppEnabledExtensionNames = &swapchain_extension_name,
     }
 
-    when ODIN_DEBUG {
+    when DAX_DEBUG {
         if exists_vk_layer_khr_validation {
             deviceCreateInfo.enabledLayerCount = 1
             layerKHRVal: cstring = "VK_LAYER_KHRONOS_validation"
@@ -361,7 +361,7 @@ CreateDevice::proc(surface_device: SurfaceDevice, exists_vk_layer_khr_validation
 
     // Create device
     resultCreateDevice := vk.CreateDevice(surface_device.device_picked, &deviceCreateInfo, nil, &logical_device)
-    when ODIN_DEBUG { 
+    when DAX_DEBUG { 
         if (resultCreateDevice != vk.Result.SUCCESS) {
             panic("Creating device failed")
         }
@@ -406,7 +406,7 @@ InitSwapchain :: proc(logical_device: vk.Device, window_handle: glfw.WindowHandl
 
     // Create swapchain_khr
     result_swapchain_khr := vk.CreateSwapchainKHR(logical_device, &swapchain_khr_createinfo, nil, &swapchain_khr)
-    when ODIN_DEBUG { 
+    when DAX_DEBUG { 
         if (result_swapchain_khr != vk.Result.SUCCESS) {
             panic("Creating swapchain failed")
         }
@@ -435,7 +435,7 @@ CreateViewsForSwapChain::proc(logical_device: vk.Device, swapchain_khr: vk.Swapc
 
         // Create swapchain_image_views
         result_swapchain_image_view := vk.CreateImageView(logical_device, &view_create_info, nil, &swapchain_image_views[i])
-        when ODIN_DEBUG { 
+        when DAX_DEBUG { 
             if (result_swapchain_image_view != vk.Result.SUCCESS) {
                 panic("Creating image view failed")
             }
@@ -483,7 +483,7 @@ CreateRenderPass :: proc(logical_device: vk.Device, format: vk.Format) -> (rende
 
     // Create swapchain_image_views
     result_renderpass := vk.CreateRenderPass(logical_device, &renderpass_createinfo, nil, &renderpass)
-    when ODIN_DEBUG { 
+    when DAX_DEBUG { 
         if (result_renderpass != vk.Result.SUCCESS) {
             panic("Creating renderpass failed")
         }
@@ -592,7 +592,7 @@ CreateFrameBuffers::proc(logical_device: vk.Device, renderpass: vk.RenderPass, i
 
         // Create framebuffer
         result_framebuffers := vk.CreateFramebuffer(logical_device, &framebuffer_createinfo, nil, &framebuffers[i])
-        when ODIN_DEBUG { 
+        when DAX_DEBUG { 
             if (result_framebuffers != vk.Result.SUCCESS) {
                 panic("Creating framebuffer failed")
             }
@@ -614,7 +614,7 @@ CreateFrameBuffers::proc(logical_device: vk.Device, renderpass: vk.RenderPass, i
     }
 
     result_command_pool := vk.CreateCommandPool(logical_device, &command_pool_createinfo, nil, &command_pool)
-    when ODIN_DEBUG {
+    when DAX_DEBUG {
         if (result_command_pool != vk.Result.SUCCESS) {
             panic("Creating command pool failed")
         }
@@ -628,7 +628,7 @@ CreateFrameBuffers::proc(logical_device: vk.Device, renderpass: vk.RenderPass, i
     }
 
     result_command_buffer := vk.AllocateCommandBuffers(logical_device, &command_buffers_info, raw_data(command_buffers))
-    when ODIN_DEBUG {
+    when DAX_DEBUG {
         if result_command_buffer != vk.Result.SUCCESS {
             panic("Creating command buffers failed")
         }
@@ -639,7 +639,7 @@ CreateFrameBuffers::proc(logical_device: vk.Device, renderpass: vk.RenderPass, i
             sType = vk.StructureType.COMMAND_BUFFER_BEGIN_INFO,
         }
         result_command_buffer_begin := vk.BeginCommandBuffer(command_buffer, &command_buffer_begininfo)
-        when ODIN_DEBUG {
+        when DAX_DEBUG {
             if result_command_buffer_begin != vk.Result.SUCCESS {
                 panic("Beginning command buffer failed")
             }
@@ -662,7 +662,7 @@ CreateFrameBuffers::proc(logical_device: vk.Device, renderpass: vk.RenderPass, i
         vk.CmdEndRenderPass(command_buffer)
 
         result_command_buffer_end := vk.EndCommandBuffer(command_buffer)
-        when ODIN_DEBUG {
+        when DAX_DEBUG {
             if result_command_buffer_end != vk.Result.SUCCESS {
                 panic("Ending recording of command buffer failed")
             }
@@ -708,7 +708,7 @@ UpdateSwapchainData :: proc(logical_device: vk.Device, window_handle: glfw.Windo
 
         pipeline_layout_createinfo := vk.PipelineLayoutCreateInfo {sType = vk.StructureType.PIPELINE_LAYOUT_CREATE_INFO}
         result_pipeline_layout := vk.CreatePipelineLayout(logical_device, &pipeline_layout_createinfo, nil, &pipeline_layout)
-        when ODIN_DEBUG { 
+        when DAX_DEBUG { 
             if (result_pipeline_layout != vk.Result.SUCCESS) {
                 panic("Creating pipeline layout failed")
             }
@@ -720,7 +720,7 @@ UpdateSwapchainData :: proc(logical_device: vk.Device, window_handle: glfw.Windo
     pipeline_info.viewport.height = f32(surface_extent.height)
     pipeline_info.scissor.extent = surface_extent
     result_pipeline := vk.CreateGraphicsPipelines(logical_device, 0, 1, &pipeline_info.createinfo, nil, &pipeline)
-    when ODIN_DEBUG { 
+    when DAX_DEBUG { 
         if (result_pipeline != vk.Result.SUCCESS) {
             panic("Creating graphics pipeline failed")
         }

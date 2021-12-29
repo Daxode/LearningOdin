@@ -4,6 +4,10 @@ import "vendor:glfw"
 import vk "vendor:vulkan"
 import "core:time"
 
+when #config(DAX_DEBUG_CMD, true) {
+    DAX_DEBUG :: true
+} else {DAX_DEBUG :: false}
+
 u32set :: bit_set[u32(0)..<u32(32);u32]
 u16set :: bit_set[u16(0)..<u16(16);u16]
 u8set :: bit_set[u8(0)..<u8(8);u8]

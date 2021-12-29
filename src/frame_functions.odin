@@ -22,7 +22,7 @@ DrawFrame::proc(logical_device: vk.Device,
     // Acquire image to draw
     image_index: u32
     result_acquire_next_image := vk.AcquireNextImageKHR(logical_device, swapchain_khr^, c.UINT64_MAX, frame_sync_handles.semaphores_image_available[current_bucket_index^], 0, &image_index)
-    when ODIN_DEBUG {if result_acquire_next_image!= vk.Result.SUCCESS{fmt.println("Couldn't acquire next image: ", result_acquire_next_image)}}
+    when DAX_DEBUG {if result_acquire_next_image!= vk.Result.SUCCESS{fmt.println("Couldn't acquire next image: ", result_acquire_next_image)}}
     
     // Submit the command to draw
     wait_mask := vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT}
@@ -43,7 +43,7 @@ DrawFrame::proc(logical_device: vk.Device,
     }
     
     result_queue_submit := vk.QueueSubmit(device_queues.graphics, 1, &submit_info, frame_sync_handles.fences_from_bucket_index[current_bucket_index^])
-    when ODIN_DEBUG {
+    when DAX_DEBUG {
         if result_queue_submit != vk.Result.SUCCESS {
             panic("Submitting queue failed")
         }
@@ -63,7 +63,7 @@ DrawFrame::proc(logical_device: vk.Device,
     if result_queue_present_khr == vk.Result.ERROR_OUT_OF_DATE_KHR || application_state.should_swap {
         SwapSwapchain(application_state)
         return
-    } else {when ODIN_DEBUG {if result_queue_present_khr!= vk.Result.SUCCESS{fmt.println("Couldn't queue for presentation: ", result_queue_present_khr)}}}
+    } else {when DAX_DEBUG {if result_queue_present_khr!= vk.Result.SUCCESS{fmt.println("Couldn't queue for presentation: ", result_queue_present_khr)}}}
 }
 
 UpdateFrame::proc(using application_state: ^ApplicationState, $should_draw: b8) {
