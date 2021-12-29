@@ -188,7 +188,7 @@ CreateVulkanInstanceWithDebugMSG :: proc(application_info: ^vk.ApplicationInfo, 
     return
 }
 
-GetOptimalSurfaceDevice::proc(app_instance: vk.Instance, surface_khr: vk.SurfaceKHR) -> (surface_device: SurfaceDevice) {
+GetOptimalSurfaceDevice::proc(app_instance: vk.Instance, surface_khr: vk.SurfaceKHR) -> SurfaceDevice {
     // Retrieve Physical Devices
     deviceCount : u32 = 0;
     vk.EnumeratePhysicalDevices(app_instance, &deviceCount, nil)
@@ -196,10 +196,15 @@ GetOptimalSurfaceDevice::proc(app_instance: vk.Instance, surface_khr: vk.Surface
     defer delete(devices, context.temp_allocator)
     vk.EnumeratePhysicalDevices(app_instance, &deviceCount, &devices[0])
     
+    surface_devices := make([]SurfaceDevice, deviceCount, context.temp_allocator)
+    defer delete(surface_devices, context.temp_allocator)
+
     // Get most suited device
     deviceBestScore : u32 = 0
-    for device in devices {
+    bestDeviceIndex: Maybe(int)
+    for device, device_index in devices {
         deviceCurrentScore : u32 = 0
+        surface_devices[device_index].device_picked = device
         
         // Retrieve Device Data
         physical_device_properties : vk.PhysicalDeviceProperties
@@ -219,14 +224,14 @@ GetOptimalSurfaceDevice::proc(app_instance: vk.Instance, surface_khr: vk.Surface
         for queue_family, i in queue_families {
             index := u32(i)
             if vk.QueueFlag.GRAPHICS in queue_family.queueFlags {
-                surface_device.family_index_graphics = index
+                surface_devices[device_index].family_index_graphics = index
                 qFamiliesSupported |= {.GRAPHICS}
             }
 
             presentSupport: b32 = false
             vk.GetPhysicalDeviceSurfaceSupportKHR(device, index, surface_khr, &presentSupport)
             if presentSupport {
-                surface_device.family_index_presentation = index
+                surface_devices[device_index].family_index_presentation = index
                 qFamiliesSupported |= {.PRESENTATION}
             }
 
@@ -273,17 +278,17 @@ GetOptimalSurfaceDevice::proc(app_instance: vk.Instance, surface_khr: vk.Surface
         vk.GetPhysicalDeviceSurfaceFormatsKHR(device,surface_khr,&format_count,raw_data(surface_formats))
         vk.GetPhysicalDeviceSurfacePresentModesKHR(device,surface_khr,&present_mode_count,raw_data(surface_present_modes))
         
-        surface_device.surface_format = surface_formats[0]
+        surface_devices[device_index].surface_format = surface_formats[0]
         for format in surface_formats {
             if format.format == vk.Format.B8G8R8A8_SRGB {
-                surface_device.surface_format = format
+                surface_devices[device_index].surface_format = format
             }
         }
 
-        surface_device.surface_present_mode = vk.PresentModeKHR.FIFO
+        surface_devices[device_index].surface_present_mode = vk.PresentModeKHR.FIFO
         for present_mode in surface_present_modes {
             if present_mode == vk.PresentModeKHR.FIFO_RELAXED {
-                surface_device.surface_present_mode = present_mode
+                surface_devices[device_index].surface_present_mode = present_mode
             }
         }
         
@@ -291,7 +296,7 @@ GetOptimalSurfaceDevice::proc(app_instance: vk.Instance, surface_khr: vk.Surface
 
         // Resolve Score
         if deviceCurrentScore > deviceBestScore {
-            surface_device.device_picked = device
+            bestDeviceIndex = device_index
             deviceBestScore = deviceCurrentScore
         }
 
@@ -301,12 +306,16 @@ GetOptimalSurfaceDevice::proc(app_instance: vk.Instance, surface_khr: vk.Surface
     }
 
     when ODIN_DEBUG {
+        fmt.println("Surface devices:", surface_devices)
+        if bestDeviceIndex == nil {
+            panic("No suitable device found!")
+        }
         physical_device_properties : vk.PhysicalDeviceProperties
-        vk.GetPhysicalDeviceProperties(surface_device.device_picked, &physical_device_properties)
+        vk.GetPhysicalDeviceProperties(surface_devices[bestDeviceIndex.?].device_picked, &physical_device_properties)
         fmt.println("GPU found: ", cstring(&physical_device_properties.deviceName[0]))
     }
 
-    return
+    return surface_devices[bestDeviceIndex.?]
 }
 
 // Rememeber to destroy device
