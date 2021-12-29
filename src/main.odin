@@ -32,24 +32,6 @@ load_vulkan_function_pointers::proc()
     });
 }
 
-ApplicationState :: struct { // Use for state not for argument passing with callback
-    window_handle: glfw.WindowHandle,
-    app_instance: vk.Instance,
-    logical_device: vk.Device,
-    
-    surface_khr : vk.SurfaceKHR,
-    surface_device: SurfaceDevice,
-    renderpass_default: vk.RenderPass,
-    device_queues: DeviceQueues,
-
-    triangle_pipeline_info: GraphicsPipelineInfo,
-    triangle_material: Material,
-    
-    should_swap: b8,
-    using swapchain_data: SwapchainData,
-    using exists_in_instance: VulkanInstanceExists, // Only filled in debug
-}
-
 main::proc()
 {
     load_vulkan_function_pointers()
@@ -130,7 +112,7 @@ main::proc()
     defer DestroySwapchainData(application_state.logical_device, application_state.swapchain_data)
     
     // Create semaphores and fences
-    frame_sync_handles := CreateFrameSyncHandles(application_state.logical_device) 
+    frame_sync_handles = CreateFrameSyncHandles(application_state.logical_device) 
     defer for i in 0..<FRAME_IN_Q_MAX {
         vk.WaitForFences(application_state.logical_device, 1, &frame_sync_handles.fences_from_bucket_index[i],false, c.UINT64_MAX)
         vk.DestroySemaphore(application_state.logical_device,frame_sync_handles.semaphores_image_available[i],nil)
@@ -161,25 +143,13 @@ main::proc()
         return
     }
 
-    time_start := time.tick_now()
-    time_frame_last := time_start
-    time_frame_current: time.Tick
-    time_delta: f64 = 0
-
-    current_bucket_index:u8 = 0
+    time_start = time.tick_now()
+    time_frame_last = time_start
     // Main loop
     for !glfw.WindowShouldClose(application_state.window_handle) {
-        time_frame_current = time.tick_now()
-        time_delta = time.duration_seconds(time.tick_diff(time_frame_last, time_frame_current))
-        glfw.PollEvents();
-
-        // Draw frame
-        DrawFrame(application_state.logical_device, &frame_sync_handles, &swapchain_khr, device_queues, &swapchain_buffers.command_buffers, &current_bucket_index, &application_state)
-
-        // After frame update
-        //fmt.println("Delta Seconds:", time_delta)
-        time_frame_last = time_frame_current
+        UpdateFrame(&application_state, true)
     }
+
 }
 
 // Based on the given logical device, 

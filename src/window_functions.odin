@@ -22,6 +22,7 @@ CreateWindowWithCallbacksAndIcon::proc() -> (window_handle: glfw.WindowHandle){
         if action == glfw.PRESS {
             switch key {
                 case glfw.KEY_F1, glfw.KEY_ENTER:
+                    // Toggle fullscreen
                     if key == glfw.KEY_ENTER {if !(mods & glfw.MOD_ALT == glfw.MOD_ALT) {return;}}
                     monitors := glfw.GetMonitors()
                     window_x, window_y := glfw.GetWindowPos(app.window_handle)
@@ -42,6 +43,7 @@ CreateWindowWithCallbacksAndIcon::proc() -> (window_handle: glfw.WindowHandle){
                         }
                     }
                 case glfw.KEY_F5:
+                    // Reload Shaders and Swapchain
                     when ODIN_DEBUG {
                         libc.system("glslc.exe ../shaders/triangle.vert -o shaders_compiled/triangle_vert.spv")
                         libc.system("glslc.exe ../shaders/triangle.frag -o shaders_compiled/triangle_frag.spv")
@@ -201,7 +203,7 @@ GetOptimalSurfaceDevice::proc(app_instance: vk.Instance, surface_khr: vk.Surface
 
     // Get most suited device
     deviceBestScore : u32 = 0
-    bestDeviceIndex: Maybe(int)
+    bestDeviceIndex: runtime.Maybe(int)
     for device, device_index in devices {
         deviceCurrentScore : u32 = 0
         surface_devices[device_index].device_picked = device
@@ -694,13 +696,13 @@ CreateSwapchainBuffers::proc(logical_device: vk.Device, swapchain_khr: vk.Swapch
 // pipeline_createinfo can only point to zero init place if first_time is true
 UpdateSwapchainData :: proc(logical_device: vk.Device, window_handle: glfw.WindowHandle, 
                         surface_khr: vk.SurfaceKHR, surface_device: ^SurfaceDevice, 
-                        renderpass: vk.RenderPass, material: Material, pipeline_info: ^GraphicsPipelineInfo, first_time: b8, using swapchain_data: ^SwapchainData) {
+                        renderpass: vk.RenderPass, material: Material, pipeline_info: ^GraphicsPipelineInfo, $first_time : b8, using swapchain_data: ^SwapchainData) {
 
     surface_capabilities: vk.SurfaceCapabilitiesKHR
     vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(surface_device.device_picked, surface_khr, &surface_capabilities)
     swapchain_khr, surface_extent = InitSwapchain(logical_device, window_handle, surface_khr, surface_capabilities, surface_device)
     
-    if first_time {
+    when first_time {
         swapchain_buffers = CreateSwapchainBuffers(logical_device, swapchain_khr)
         SetPipelineInfoFromMaterial(logical_device, renderpass, pipeline_layout, material, pipeline_info)
 
@@ -742,8 +744,13 @@ DestroySwapchainData::proc(logical_device: vk.Device, using swapchain_data: Swap
 }
 
 SwapSwapchain::proc(using application_state: ^ApplicationState) {
+    w, h := glfw.GetFramebufferSize(window_handle)
+    for (w == 0 || h == 0) && !glfw.WindowShouldClose(window_handle) {
+        UpdateFrame(application_state, false)
+    }
+
     vk.DeviceWaitIdle(logical_device)
     DestroySwapchainData(logical_device, swapchain_data)
     UpdateSwapchainData(logical_device, window_handle, surface_khr, &surface_device, renderpass_default, triangle_material, &triangle_pipeline_info, false, &swapchain_data)  
-    application_state.should_swap = false  
+    application_state.should_swap = false
 }

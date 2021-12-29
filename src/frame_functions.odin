@@ -3,8 +3,16 @@ package playing_with_vulkan
 import "core:c"
 import "core:fmt"
 import vk "vendor:vulkan"
+import "core:time"
+import "vendor:glfw"
 
-DrawFrame::proc(logical_device: vk.Device, frame_sync_handles: ^FrameSyncHandles, swapchain_khr: ^vk.SwapchainKHR, device_queues: DeviceQueues, command_buffers: ^[]vk.CommandBuffer, current_bucket_index: ^u8, application_state: ^ApplicationState) {
+DrawFrame::proc(logical_device: vk.Device, 
+                frame_sync_handles: ^FrameSyncHandles, 
+                swapchain_khr: ^vk.SwapchainKHR, 
+                device_queues: DeviceQueues, 
+                command_buffers: ^[]vk.CommandBuffer, 
+                current_bucket_index: ^u8, 
+                application_state: ^ApplicationState) {
     defer current_bucket_index^ = (current_bucket_index^+1)%FRAME_IN_Q_MAX
 
     // Wait till bucket is ready
@@ -56,4 +64,25 @@ DrawFrame::proc(logical_device: vk.Device, frame_sync_handles: ^FrameSyncHandles
         SwapSwapchain(application_state)
         return
     } else {when ODIN_DEBUG {if result_queue_present_khr!= vk.Result.SUCCESS{fmt.println("Couldn't queue for presentation: ", result_queue_present_khr)}}}
+}
+
+BeforeFrame::proc(using frame_state: ^FrameState) {
+    time_frame_current = time.tick_now()
+    time_delta = time.duration_seconds(time.tick_diff(time_frame_last, time_frame_current))
+    glfw.PollEvents();
+}
+
+AfterFrame::proc(using frame_state: ^FrameState) {
+    //fmt.println("Delta Seconds:", time_delta)
+    time_frame_last = time_frame_current
+}
+
+UpdateFrame::proc(using application_state: ^ApplicationState, $should_draw: b8) {
+    BeforeFrame(&frame_state)
+    // Draw frame
+    when should_draw {
+        DrawFrame(application_state.logical_device, &frame_sync_handles, &swapchain_khr, device_queues, &swapchain_buffers.command_buffers, &current_bucket_index, application_state)
+    }
+
+    AfterFrame(&frame_state)
 }
