@@ -66,23 +66,16 @@ DrawFrame::proc(logical_device: vk.Device,
     } else {when ODIN_DEBUG {if result_queue_present_khr!= vk.Result.SUCCESS{fmt.println("Couldn't queue for presentation: ", result_queue_present_khr)}}}
 }
 
-BeforeFrame::proc(using frame_state: ^FrameState) {
+UpdateFrame::proc(using application_state: ^ApplicationState, $should_draw: b8) {
     time_frame_current = time.tick_now()
     time_delta = time.duration_seconds(time.tick_diff(time_frame_last, time_frame_current))
     glfw.PollEvents();
-}
 
-AfterFrame::proc(using frame_state: ^FrameState) {
-    //fmt.println("Delta Seconds:", time_delta)
-    time_frame_last = time_frame_current
-}
-
-UpdateFrame::proc(using application_state: ^ApplicationState, $should_draw: b8) {
-    BeforeFrame(&frame_state)
     // Draw frame
     when should_draw {
         DrawFrame(application_state.logical_device, &frame_sync_handles, &swapchain_khr, device_queues, &swapchain_buffers.command_buffers, &current_bucket_index, application_state)
     }
 
-    AfterFrame(&frame_state)
+    fmt.println("Delta Seconds:", time_delta)
+    time_frame_last = time_frame_current
 }
