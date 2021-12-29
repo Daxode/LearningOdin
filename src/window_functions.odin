@@ -21,8 +21,26 @@ CreateWindowWithCallbacksAndIcon::proc() -> (window_handle: glfw.WindowHandle){
         context = runtime.default_context()
         if action == glfw.PRESS {
             switch key {
-                case glfw.KEY_F1:
-                    //glfw.SetWindowMonitor()
+                case glfw.KEY_F1, glfw.KEY_ENTER:
+                    if key == glfw.KEY_ENTER {if !(mods & glfw.MOD_ALT == glfw.MOD_ALT) {return;}}
+                    monitors := glfw.GetMonitors()
+                    window_x, window_y := glfw.GetWindowPos(app.window_handle)
+                    for monitor in monitors {
+                        videomode := glfw.GetVideoMode(monitor)
+                        monitor_x, monitor_y := glfw.GetMonitorPos(monitor)
+                        if window_x >= monitor_x && window_y >= monitor_y && window_x < monitor_x+videomode.width && window_y < monitor_y+videomode.height {
+                            is_fullscreen := 1-glfw.GetWindowAttrib(app.window_handle, glfw.DECORATED)
+                            glfw.SetWindowAttrib(app.window_handle, glfw.DECORATED, is_fullscreen)
+                            if is_fullscreen > 0 {
+                                glfw.SetWindowPos(app.window_handle,monitor_x+200,monitor_y+200)
+                                glfw.SetWindowSize(app.window_handle, 512, 512)
+                            } else {
+                                videomode := glfw.GetVideoMode(monitor)
+                                glfw.SetWindowPos(app.window_handle,monitor_x,monitor_y)
+                                glfw.SetWindowSize(app.window_handle, videomode.width, videomode.height)
+                            }
+                        }
+                    }
                 case glfw.KEY_F5:
                     when ODIN_DEBUG {
                         libc.system("glslc.exe ../shaders/triangle.vert -o shaders_compiled/triangle_vert.spv")
