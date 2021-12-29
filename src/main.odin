@@ -72,9 +72,11 @@ main::proc()
     application_state.app_instance, debugMessengerEXT = CreateVulkanInstanceWithDebugMSG(&appplication_info, &application_state.exists_in_instance)
     defer vk.DestroyInstance(application_state.app_instance, nil)
     defer when ODIN_DEBUG {
-        DestroyDebugUtilsMessengerEXT := vk.ProcDestroyDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(application_state.app_instance, "vkDestroyDebugUtilsMessengerEXT"));
-        if (DestroyDebugUtilsMessengerEXT != nil) {
-            DestroyDebugUtilsMessengerEXT(application_state.app_instance, debugMessengerEXT, nil);
+        if exists_in_instance.exists_vk_ext_debug_utils {
+            DestroyDebugUtilsMessengerEXT := vk.ProcDestroyDebugUtilsMessengerEXT(vk.GetInstanceProcAddr(application_state.app_instance, "vkDestroyDebugUtilsMessengerEXT"));
+            if (DestroyDebugUtilsMessengerEXT != nil) {
+                DestroyDebugUtilsMessengerEXT(application_state.app_instance, debugMessengerEXT, nil);
+            }
         }
     }
 
